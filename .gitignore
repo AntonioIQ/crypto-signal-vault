@@ -6,6 +6,7 @@
 # Node
 node_modules/
 .netlify/
+public/data/
 
 # Python
 __pycache__/

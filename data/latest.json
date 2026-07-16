@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-07-15T00:00:00-06:00",
+  "timezone": "America/Mexico_City",
+  "currency": "usd",
+  "stale": true,
+  "assets": {
+    "btc": {
+      "id": "bitcoin",
+      "symbol": "BTC",
+      "name": "Bitcoin",
+      "price": null,
+      "source_updated_at": null
+    },
+    "eth": {
+      "id": "ethereum",
+      "symbol": "ETH",
+      "name": "Ethereum",
+      "price": null,
+      "source_updated_at": null
+    }
+  }
+}

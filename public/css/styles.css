@@ -1,17 +1,169 @@
-/* Crypto Signal Vault — base styles (Front-UX owns this file, task 1.7) */
+/* Crypto Signal Vault — Front-UX (tasks 1.7 / 1.8) */
 :root {
   color-scheme: light dark;
-  font-family: system-ui, -apple-system, sans-serif;
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #1c2333;
+  --muted: #5b6478;
+  --accent: #6c5ce7;
+  --up: #14935c;
+  --down: #d64545;
+  --border: #e3e6ef;
+  --fresh: #14935c;
+  --stale: #c98a1b;
+  --error: #d64545;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12141c;
+    --card: #1c1f2b;
+    --text: #eceff7;
+    --muted: #9aa3b8;
+    --border: #2b2f40;
+  }
+}
+
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
 }
 
-.container {
+.site-header {
   text-align: center;
+  padding: 2rem 1rem 0.5rem;
+}
+
+.site-header h1 { margin: 0; font-size: 1.7rem; }
+.tagline { margin: 0.3rem 0 0; color: var(--muted); }
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
   padding: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+
+/* Grid items default to min-width:auto; without this the chart canvas
+   forces horizontal overflow on small viewports. */
+.container > * { min-width: 0; }
+
+/* Estados: cargando / fresco / stale / error */
+.status-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.status-banner.fresh .status-dot { background: var(--fresh); }
+.status-banner.stale .status-dot { background: var(--stale); }
+.status-banner.error .status-dot { background: var(--error); }
+.status-banner.stale { color: var(--stale); }
+.status-banner.error { color: var(--error); }
+
+.asset-tabs {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.tab {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.price-card,
+.chart-card,
+.prediction-card,
+.mlops-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1.2rem;
+}
+
+.price-card { text-align: center; }
+.price-card h2 { margin: 0; font-size: 1.1rem; color: var(--muted); font-weight: 600; }
+
+.price {
+  margin: 0.2rem 0 0;
+  font-size: clamp(2.2rem, 8vw, 3.2rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.change { margin: 0.2rem 0 0; font-weight: 600; }
+.change.up { color: var(--up); }
+.change.down { color: var(--down); }
+
+.chart-card h3, .prediction-card h3 { margin: 0 0 0.8rem; font-size: 1rem; }
+
+.chart-wrap { position: relative; height: 260px; }
+
+.chart-note, .mini-disclaimer {
+  margin: 0.8rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.prediction-card p { margin: 0; }
+
+.mlops-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.mlops-card h4 { margin: 0; font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.mlops-card p { margin: 0.4rem 0 0; font-weight: 600; font-size: 0.95rem; }
+
+.soon {
+  font-size: 0.7rem;
+  background: var(--border);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+}
+
+.site-footer {
+  max-width: 720px;
+  margin: 1rem auto 0;
+  padding: 1rem 1rem 2rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  .mlops-grid { grid-template-columns: 1fr; }
+  .chart-wrap { height: 220px; }
 }

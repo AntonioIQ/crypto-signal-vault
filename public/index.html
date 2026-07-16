@@ -3,17 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Crypto Signal Vault — precios de BTC y ETH con predicción de Machine Learning. Experimento educativo, no es asesoría financiera.">
   <title>Crypto Signal Vault</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <main class="container">
+  <header class="site-header">
     <h1>🔮 Crypto Signal Vault</h1>
-    <p>Sitio en construcción — Fase 1 en curso.</p>
-    <footer>
-      <small>Experimento educativo de Machine Learning. Nada de lo aquí mostrado es asesoría financiera.</small>
-    </footer>
+    <p class="tagline">Precios en vivo y predicción con Machine Learning, explicados en simple.</p>
+  </header>
+
+  <main class="container">
+    <div id="status-banner" class="status-banner" role="status" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="status-text">Cargando datos…</span>
+    </div>
+
+    <nav class="asset-tabs" role="tablist" aria-label="Activo">
+      <button class="tab active" role="tab" aria-selected="true" data-asset="btc">₿ Bitcoin</button>
+      <button class="tab" role="tab" aria-selected="false" data-asset="eth">Ξ Ethereum</button>
+    </nav>
+
+    <section class="price-card" aria-labelledby="asset-name">
+      <h2 id="asset-name">Bitcoin</h2>
+      <p id="price" class="price">—</p>
+      <p id="change" class="change" title="Comparado con hace 24 horas"></p>
+    </section>
+
+    <section class="chart-card">
+      <h3>Últimos 30 días</h3>
+      <div class="chart-wrap">
+        <canvas id="chart" aria-label="Gráfica de precio de los últimos 30 días" role="img"></canvas>
+      </div>
+      <p class="chart-note">Línea sólida: precio real. La línea punteada de predicción llegará en la Fase&nbsp;2.</p>
+    </section>
+
+    <section class="prediction-card" aria-labelledby="prediction-title">
+      <h3 id="prediction-title">¿Y la predicción?</h3>
+      <p id="prediction-body">🧪 El modelo de predicción a 24–48&nbsp;h se está construyendo (Fase&nbsp;2).
+        Cuando esté listo verás aquí si es probable que el precio suba 🔼, baje 🔽 o se mantenga ➡️,
+        junto con qué tan seguro está el modelo.</p>
+      <p class="mini-disclaimer">Esto será un experimento educativo, nunca una recomendación de inversión.</p>
+    </section>
+
+    <section class="mlops-grid" aria-label="Estado del sistema">
+      <article class="mlops-card">
+        <h4>🏋️ Último entrenamiento</h4>
+        <p id="card-trained">— <span class="soon">Fase 2</span></p>
+      </article>
+      <article class="mlops-card">
+        <h4>🎯 Precisión (7 días)</h4>
+        <p id="card-accuracy">— <span class="soon">Fase 3</span></p>
+      </article>
+      <article class="mlops-card">
+        <h4>🔄 Próxima actualización</h4>
+        <p id="card-next-update">—</p>
+      </article>
+    </section>
   </main>
+
+  <footer class="site-footer">
+    <p id="last-update">Última actualización: —</p>
+    <p class="disclaimer">⚠️ Crypto Signal Vault es un experimento educativo de Machine Learning.
+      Nada de lo aquí mostrado constituye asesoría financiera ni una recomendación de compra o venta.</p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
