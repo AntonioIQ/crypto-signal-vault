@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 14:22 (hora CDMX)
+**Última actualización**: 2026-07-16 16:24 (hora CDMX)
 
 ## Fase activa: FASE 1 — Fundación · «la página viva»
 
@@ -30,8 +30,9 @@ Resuelta la duda que quedó abierta en la sesión anterior: el snapshot vivo se 
 - Sitio público: `https://likelycoin.netlify.app` responde HTTP 200.
 - `GET /api/latest` responde HTTP 200 desde la Function desplegada.
 - Ejecución manual de `predict` a las 14:09 CDMX: HTTP 200, snapshot en Netlify Blobs con `stale: false`, BTC y ETH con precios reales.
-- UI productiva verificada: muestra «Datos al día», precio real, siguiente actualización horaria, sin errores de consola ni desbordamiento horizontal.
-- Rediseño LikelyCoin listo localmente: esfera y emojis decorativos eliminados, identidad geométrica de señal, jerarquía editorial y atribución de CoinGecko; QA visual en 1440px/390px sin errores ni overflow. Pendiente desplegar esta revisión.
+- Rediseño LikelyCoin desplegado en producción (`3d42b6b`): esfera y emojis decorativos eliminados, identidad geométrica de señal, jerarquía editorial y atribución de CoinGecko.
+- UI productiva verificada: marca LikelyCoin, «Datos al día», precio real, sin errores de consola ni desbordamiento horizontal. QA responsive previo en 1440px/390px.
+- Snapshot fresco observado a las 16:09 CDMX después del redeploy (`stale: false`).
 - Sin bloqueos activos. Falta observar el comportamiento automático del schedule `@hourly`.
 
 ## Siguiente paso (uno solo)

@@ -24,8 +24,10 @@
 - Frontend rediseñado con marca geométrica de señal, paleta oscura sobria, jerarquía editorial, precio/gráfica protagonistas y cero emojis decorativos.
 - Añadida atribución visible del plan Demo de CoinGecko.
 - QA local en 1440px y 390px: BTC/ETH cambian correctamente, sin errores de consola ni desbordamiento horizontal; 17 pruebas verdes.
+- Commit `3d42b6b` publicado en `main`; Netlify desplegó el rediseño automáticamente.
+- Producción verificada con marca LikelyCoin, sin esfera, precio real, estado «Datos al día», sin errores de consola ni overflow. Snapshot fresco observado a las 16:09 CDMX.
 
-**Siguiente:** desplegar y verificar el rediseño; después comprobar tres avances consecutivos de `generated_at` y ejecutar el checklist de QA 1.10.
+**Siguiente:** comprobar tres avances consecutivos de `generated_at` y ejecutar el checklist de QA 1.10.
 
 ---
 
