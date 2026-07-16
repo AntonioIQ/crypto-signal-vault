@@ -1,13 +1,15 @@
-// Crypto Signal Vault — dashboard (Front-UX, tasks 1.7 / 1.8)
+// LikelyCoin — dashboard (Front-UX, tasks 1.7 / 1.8)
 // Data flow: /api/latest (Blobs-backed function) with fallback to the static
 // seed /data/latest.json; 30-day history from static /data/history/<asset>.json.
 
 const TIMEZONE = 'America/Mexico_City';
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000; // >2h without ingestion = stale
+const ANCHOR_TOLERANCE_MS = 2 * 60 * 60 * 1000; // max drift for the 24h anchor
 
 const els = {
   banner: document.getElementById('status-banner'),
   statusText: document.getElementById('status-text'),
+  assetTicker: document.getElementById('asset-ticker'),
   assetName: document.getElementById('asset-name'),
   price: document.getElementById('price'),
   change: document.getElementById('change'),
@@ -85,36 +87,52 @@ function renderStatus(snapshot) {
   els.nextUpdate.textContent = `${timeFmt.format(next)} (CDMX)`;
 }
 
-function change24h(history) {
+// Compares the displayed price against the history point closest to 24h
+// before it. The anchor must land within ANCHOR_TOLERANCE_MS of that target,
+// otherwise the window is not really 24h and we show nothing rather than a
+// number that contradicts the price above it.
+function change24h(history, price, priceAsOf) {
   const points = history?.points ?? [];
-  if (points.length < 2) return null;
-  const last = points[points.length - 1];
-  const target = new Date(last.timestamp).getTime() - 24 * 3_600_000;
-  let previous = points[0];
+  if (!points.length || typeof price !== 'number' || !priceAsOf) return null;
+
+  const target = new Date(priceAsOf).getTime() - 24 * 3_600_000;
+  let anchor = null;
+  let anchorDrift = Infinity;
   for (const point of points) {
-    if (new Date(point.timestamp).getTime() > target) break;
-    previous = point;
+    const drift = Math.abs(new Date(point.timestamp).getTime() - target);
+    if (drift < anchorDrift) {
+      anchorDrift = drift;
+      anchor = point;
+    }
   }
-  return ((last.price - previous.price) / previous.price) * 100;
+
+  if (!anchor || anchorDrift > ANCHOR_TOLERANCE_MS) return null;
+  return ((price - anchor.price) / anchor.price) * 100;
 }
 
 function renderPrice() {
   const asset = state.snapshot?.assets?.[state.asset];
   const history = state.history[state.asset];
   els.assetName.textContent = asset?.name ?? state.asset.toUpperCase();
+  els.assetTicker.textContent = `${asset?.symbol ?? state.asset.toUpperCase()} · USD`;
 
   // Live price when available; otherwise last history point (labeled stale upstream).
-  const price = asset?.price ?? history?.points?.at(-1)?.price ?? null;
+  const lastPoint = history?.points?.at(-1) ?? null;
+  const price = asset?.price ?? lastPoint?.price ?? null;
   els.price.textContent = price === null ? 'Sin datos' : priceFmt.format(price);
 
-  const change = change24h(history);
+  // The change must be anchored to whichever price we actually display.
+  const priceAsOf = asset?.price != null
+    ? state.snapshot?.generated_at
+    : lastPoint?.timestamp;
+  const change = change24h(history, price, priceAsOf);
   els.change.classList.remove('up', 'down');
   if (change === null) {
     els.change.textContent = '';
   } else {
     els.change.classList.add(change >= 0 ? 'up' : 'down');
-    const arrow = change >= 0 ? '▲' : '▼';
-    els.change.textContent = `${arrow} ${Math.abs(change).toFixed(1)} % en 24 h`;
+    const sign = change >= 0 ? '+' : '−';
+    els.change.textContent = `${sign}${Math.abs(change).toFixed(1)} % en las últimas 24 h`;
   }
 }
 
@@ -126,7 +144,12 @@ function renderChart() {
   const data = history.points.map((p) => p.price);
 
   if (state.chart) state.chart.destroy();
-  const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue('--accent').trim();
+  const muted = styles.getPropertyValue('--muted').trim();
+  const grid = styles.getPropertyValue('--chart-grid').trim();
+  const surface = styles.getPropertyValue('--surface-raised').trim();
+  const text = styles.getPropertyValue('--text').trim();
 
   state.chart = new Chart(document.getElementById('chart'), {
     type: 'line',
@@ -136,7 +159,9 @@ function renderChart() {
         label: 'Precio real',
         data,
         borderColor: accent,
-        borderWidth: 2,
+        backgroundColor: 'rgba(105, 230, 178, 0.06)',
+        borderWidth: 2.5,
+        fill: true,
         pointRadius: 0,
         tension: 0.2,
         spanGaps: true, // tolerate ingestion gaps (R-11)
@@ -146,9 +171,17 @@ function renderChart() {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      layout: { padding: { top: 8 } },
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: surface,
+          titleColor: muted,
+          bodyColor: text,
+          borderColor: grid,
+          borderWidth: 1,
+          padding: 12,
+          displayColors: false,
           callbacks: {
             title: (items) => `${timeFmt.format(new Date(items[0].label))} (CDMX)`,
             label: (item) => priceFmt.format(item.parsed.y),
@@ -158,15 +191,25 @@ function renderChart() {
       scales: {
         x: {
           ticks: {
+            color: muted,
+            font: { size: 10 },
             maxTicksLimit: 7,
             callback(value) {
               return dayFmt.format(new Date(this.getLabelForValue(value)));
             },
           },
+          border: { display: false },
           grid: { display: false },
         },
         y: {
-          ticks: { callback: (value) => priceFmt.format(value) },
+          border: { display: false },
+          grid: { color: grid },
+          ticks: {
+            color: muted,
+            font: { size: 10 },
+            maxTicksLimit: 5,
+            callback: (value) => priceFmt.format(value),
+          },
         },
       },
     },

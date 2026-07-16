@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 (hora CDMX)
+**Última actualización**: 2026-07-16 14:22 (hora CDMX)
 
 ## Fase activa: FASE 1 — Fundación · «la página viva»
 
@@ -11,12 +11,12 @@
 | # | Tarea | Estado |
 |---|---|---|
 | 1.1 | Repo con estructura de carpetas + `docs/` + agentes | ☑ Hecha |
-| 1.2 | Conectar repo a Netlify, verificar deploy del esqueleto | ☐ Pendiente (Antonio) |
-| 1.3 | Key demo de CoinGecko → env vars de Netlify | ☐ Pendiente (Antonio) |
-| 1.4 | `predict.mjs` v0: precio actual → snapshot con `stale` | ☑ Hecha (falta verificar en Netlify) |
-| 1.5 | Schedule horario + verificar 3 corridas | ☐ Pendiente (requiere 1.2) |
+| 1.2 | Conectar repo a Netlify, verificar deploy del esqueleto | ☑ Hecha (`likelycoin.netlify.app`, `main`) |
+| 1.3 | Key demo de CoinGecko → env vars de Netlify | ☑ Hecha (`COINGECKO_DEMO_API_KEY`) |
+| 1.4 | `predict.mjs` v0: precio actual → snapshot con `stale` | ☑ Hecha y verificada en Netlify |
+| 1.5 | Schedule horario + verificar 3 corridas | ◐ En curso (prueba manual fresca; faltan 3 corridas automáticas) |
 | 1.6 | Bootstrap histórico 30 días → `data/history/` | ☑ Hecha (~720 puntos horarios por activo) |
-| 1.7 | `index.html` + `app.js`: precio, gráfica, estados, responsive | ☑ Hecha (verificada local en 375px y desktop) |
+| 1.7 | `index.html` + `app.js`: precio, gráfica, estados, responsive | ☑ Hecha (rediseño profesional LikelyCoin verificado en 390px y desktop) |
 | 1.8 | Footer disclaimer + timestamp CDMX | ☑ Hecha |
 | 1.9 | `ci.yml` con validación de schema de `latest.json` | ☑ Hecha (17 tests verdes) |
 | 1.10 | Checklist de QA y cierre de fase | ☐ Pendiente (requiere sitio vivo) |
@@ -25,10 +25,15 @@
 
 Resuelta la duda que quedó abierta en la sesión anterior: el snapshot vivo se guarda en **Netlify Blobs** (store `market-data`, key `latest.json`), lo escribe `predict.mjs` cada hora y lo expone `GET /api/latest`. `data/latest.json` en el repo es **seed/fallback versionado**, no el estado vivo; el build lo copia a `public/data/`. El frontend pide `/api/latest` y cae al JSON estático si falla. Detalle completo en `01_ARQUITECTURA.md` §1.
 
-## Bloqueos
+## Validación de producción
 
-- 1.2 y 1.3 requieren cuentas de Antonio (Netlify, CoinGecko). Todo lo demás de la fase ya está construido y probado localmente.
+- Sitio público: `https://likelycoin.netlify.app` responde HTTP 200.
+- `GET /api/latest` responde HTTP 200 desde la Function desplegada.
+- Ejecución manual de `predict` a las 14:09 CDMX: HTTP 200, snapshot en Netlify Blobs con `stale: false`, BTC y ETH con precios reales.
+- UI productiva verificada: muestra «Datos al día», precio real, siguiente actualización horaria, sin errores de consola ni desbordamiento horizontal.
+- Rediseño LikelyCoin listo localmente: esfera y emojis decorativos eliminados, identidad geométrica de señal, jerarquía editorial y atribución de CoinGecko; QA visual en 1440px/390px sin errores ni overflow. Pendiente desplegar esta revisión.
+- Sin bloqueos activos. Falta observar el comportamiento automático del schedule `@hourly`.
 
 ## Siguiente paso (uno solo)
 
-➡️ **Antonio**: conectar el repo a Netlify (tarea 1.2) y agregar `COINGECKO_DEMO_API_KEY` a las env vars (1.3). Con eso se desbloquea 1.5 y el cierre de fase.
+➡️ Verificar que `generated_at` avance en **3 corridas automáticas consecutivas** de `@hourly`; después ejecutar el checklist 1.10 y cerrar la Fase 1.

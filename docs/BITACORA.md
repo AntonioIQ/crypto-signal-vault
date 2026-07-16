@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-07-16 — Primer deploy productivo en Netlify (1.2–1.4)
+
+**Hecho:**
+- Repo `AntonioIQ/crypto-signal-vault` conectado desde `main` al nuevo proyecto Netlify `likelycoin`.
+- Build productivo confirmado con `npm run build`, publish directory `public` y functions directory `netlify/functions`.
+- Variable privada `COINGECKO_DEMO_API_KEY` configurada por Antonio en Netlify.
+- Sitio público `https://likelycoin.netlify.app` y `GET /api/latest` verificados con HTTP 200.
+- `predict` ejecutada manualmente a las 14:09 CDMX: escribió en Netlify Blobs un snapshot fresco (`stale: false`) con precios reales de BTC y ETH.
+- UI productiva verificada con «Datos al día», BTC renderizado, siguiente actualización horaria, sin errores de consola ni desbordamiento horizontal.
+
+**Resultado:**
+- Tareas 1.2, 1.3 y 1.4 cerradas.
+- Tarea 1.5 en curso: la función y el schedule `@hourly` están desplegados; faltan tres corridas automáticas consecutivas para validar la operación horaria.
+
+**Corrección visual solicitada:**
+- Se confirmó que producción todavía mostraba el encabezado provisional con esfera y una estética demasiado básica.
+- Se documentó **LikelyCoin** como marca pública; Crypto Signal Vault permanece como nombre interno del repo y arquitectura.
+- Frontend rediseñado con marca geométrica de señal, paleta oscura sobria, jerarquía editorial, precio/gráfica protagonistas y cero emojis decorativos.
+- Añadida atribución visible del plan Demo de CoinGecko.
+- QA local en 1440px y 390px: BTC/ETH cambian correctamente, sin errores de consola ni desbordamiento horizontal; 17 pruebas verdes.
+
+**Siguiente:** desplegar y verificar el rediseño; después comprobar tres avances consecutivos de `generated_at` y ejecutar el checklist de QA 1.10.
+
+---
+
 ## 2026-07-16 — Fase 1 casi cerrada: datos, functions, frontend y CI (1.4, 1.6–1.9)
 
 **Hecho:**

@@ -4,6 +4,8 @@
 
 **Crypto Signal Vault** es una plataforma web de predicción de precios de criptomonedas (BTC y ETH inicialmente) con un pipeline de MLOps completo y un chatbot analista tipo RAG. Proyecto personal de portafolio de **Antonio**, con tres objetivos:
 
+La marca pública del producto es **LikelyCoin**. «Crypto Signal Vault» se conserva como nombre interno del repositorio y de la arquitectura. La interfaz pública usa una identidad sobria de producto de datos y evita la esfera de adivinación, emojis decorativos y recursos que hagan parecer infantil la predicción.
+
 1. **Portafolio profesional**: demostrar ciencia de datos aplicada + MLOps end-to-end (no solo un notebook), complementando su perfil de arquitectura de datos (Data Vault 2.0, PySpark, Hive/Impala).
 2. **Aprendizaje**: primer proyecto propio con ciclo completo de ML productivo (entrenamiento programado, serving, monitoreo de drift).
 3. **Producto usable**: página pública, entendible para no financieros, con precio actual, predicción a 24–48h y un "analista" conversacional acotado a los datos del modelo.

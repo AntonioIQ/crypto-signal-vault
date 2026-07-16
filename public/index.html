@@ -3,70 +3,165 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Crypto Signal Vault — precios de BTC y ETH con predicción de Machine Learning. Experimento educativo, no es asesoría financiera.">
-  <title>Crypto Signal Vault</title>
+  <meta name="theme-color" content="#07110f">
+  <meta name="description" content="LikelyCoin muestra precios de Bitcoin y Ethereum con contexto simple y una señal predictiva en desarrollo.">
+  <title>LikelyCoin — El mercado, explicado con claridad</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <header class="site-header">
-    <h1>🔮 Crypto Signal Vault</h1>
-    <p class="tagline">Precios en vivo y predicción con Machine Learning, explicados en simple.</p>
-  </header>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="LikelyCoin, inicio">
+        <svg class="brand-mark" viewBox="0 0 44 44" role="img" aria-label="Señal ascendente de LikelyCoin">
+          <rect width="44" height="44" rx="13"></rect>
+          <path d="M10 29.5 17.5 22l6 4.5L34 15"></path>
+          <path d="M27.5 15H34v6.5"></path>
+        </svg>
+        <span class="brand-copy">
+          <strong>LikelyCoin</strong>
+          <span>Datos y predicción</span>
+        </span>
+      </a>
 
-  <main class="container">
-    <div id="status-banner" class="status-banner" role="status" aria-live="polite">
-      <span class="status-dot" aria-hidden="true"></span>
-      <span id="status-text">Cargando datos…</span>
-    </div>
-
-    <nav class="asset-tabs" role="tablist" aria-label="Activo">
-      <button class="tab active" role="tab" aria-selected="true" data-asset="btc">₿ Bitcoin</button>
-      <button class="tab" role="tab" aria-selected="false" data-asset="eth">Ξ Ethereum</button>
-    </nav>
-
-    <section class="price-card" aria-labelledby="asset-name">
-      <h2 id="asset-name">Bitcoin</h2>
-      <p id="price" class="price">—</p>
-      <p id="change" class="change" title="Comparado con hace 24 horas"></p>
-    </section>
-
-    <section class="chart-card">
-      <h3>Últimos 30 días</h3>
-      <div class="chart-wrap">
-        <canvas id="chart" aria-label="Gráfica de precio de los últimos 30 días" role="img"></canvas>
+      <div id="status-banner" class="status-banner" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Cargando datos…</span>
       </div>
-      <p class="chart-note">Línea sólida: precio real. La línea punteada de predicción llegará en la Fase&nbsp;2.</p>
-    </section>
+    </header>
 
-    <section class="prediction-card" aria-labelledby="prediction-title">
-      <h3 id="prediction-title">¿Y la predicción?</h3>
-      <p id="prediction-body">🧪 El modelo de predicción a 24–48&nbsp;h se está construyendo (Fase&nbsp;2).
-        Cuando esté listo verás aquí si es probable que el precio suba 🔼, baje 🔽 o se mantenga ➡️,
-        junto con qué tan seguro está el modelo.</p>
-      <p class="mini-disclaimer">Esto será un experimento educativo, nunca una recomendación de inversión.</p>
-    </section>
+    <main class="container">
+      <section class="market-intro" aria-labelledby="page-title">
+        <div class="intro-copy">
+          <p class="eyebrow">PANORAMA EN TIEMPO REAL</p>
+          <h1 id="page-title">El mercado, explicado<br>con claridad.</h1>
+          <p class="intro-text">Sigue el precio de Bitcoin y Ethereum hoy. Sin ruido, sin promesas y sin lenguaje complicado.</p>
+        </div>
 
-    <section class="mlops-grid" aria-label="Estado del sistema">
-      <article class="mlops-card">
-        <h4>🏋️ Último entrenamiento</h4>
-        <p id="card-trained">— <span class="soon">Fase 2</span></p>
-      </article>
-      <article class="mlops-card">
-        <h4>🎯 Precisión (7 días)</h4>
-        <p id="card-accuracy">— <span class="soon">Fase 3</span></p>
-      </article>
-      <article class="mlops-card">
-        <h4>🔄 Próxima actualización</h4>
-        <p id="card-next-update">—</p>
-      </article>
-    </section>
-  </main>
+        <nav class="asset-tabs" role="tablist" aria-label="Selecciona una moneda">
+          <button class="tab active" role="tab" aria-selected="true" data-asset="btc">
+            <span class="tab-symbol">BTC</span>
+            <span>Bitcoin</span>
+          </button>
+          <button class="tab" role="tab" aria-selected="false" data-asset="eth">
+            <span class="tab-symbol">ETH</span>
+            <span>Ethereum</span>
+          </button>
+        </nav>
+      </section>
 
-  <footer class="site-footer">
-    <p id="last-update">Última actualización: —</p>
-    <p class="disclaimer">⚠️ Crypto Signal Vault es un experimento educativo de Machine Learning.
-      Nada de lo aquí mostrado constituye asesoría financiera ni una recomendación de compra o venta.</p>
-  </footer>
+      <section class="dashboard-grid" aria-label="Resumen del mercado">
+        <article class="price-card panel" aria-labelledby="asset-name">
+          <div class="price-card-heading">
+            <div>
+              <p id="asset-ticker" class="asset-ticker">BTC · USD</p>
+              <h2 id="asset-name">Bitcoin</h2>
+            </div>
+            <span class="live-label">EN VIVO</span>
+          </div>
+
+          <div class="price-block">
+            <p class="price-label">Precio actual</p>
+            <p id="price" class="price">—</p>
+            <p id="change" class="change" title="Comparado con hace 24 horas"></p>
+          </div>
+
+          <dl class="price-meta">
+            <div>
+              <dt>Moneda</dt>
+              <dd>Dólar estadounidense</dd>
+            </div>
+            <div>
+              <dt>Frecuencia</dt>
+              <dd>Cada hora</dd>
+            </div>
+            <div>
+              <dt>Fuente</dt>
+              <dd>CoinGecko</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article class="chart-card panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">COMPORTAMIENTO RECIENTE</p>
+              <h2>Últimos 30 días</h2>
+            </div>
+            <div class="chart-legend"><span aria-hidden="true"></span> Precio real</div>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="chart" aria-label="Gráfica de precio de los últimos 30 días" role="img"></canvas>
+          </div>
+          <p class="chart-note">La señal de las próximas 48 horas se añadirá cuando el modelo supere las pruebas de calidad.</p>
+        </article>
+      </section>
+
+      <section class="prediction-card panel" aria-labelledby="prediction-title">
+        <div class="prediction-copy">
+          <p class="section-label">MODELO PREDICTIVO · FASE 2</p>
+          <h2 id="prediction-title">Una lectura simple de las próximas 48 horas.</h2>
+          <p id="prediction-body">El modelo está en construcción. Cuando esté validado, aquí verás si el precio probablemente suba, baje o se mantenga, junto con su nivel de confianza medido.</p>
+          <p class="mini-disclaimer">La señal será informativa y educativa. No será una recomendación para comprar o vender.</p>
+        </div>
+
+        <div class="signal-preview" aria-label="Vista previa de la señal, todavía sin datos">
+          <div class="preview-row">
+            <span>Dirección probable</span>
+            <strong>—</strong>
+          </div>
+          <div class="preview-row">
+            <span>Confianza medida</span>
+            <strong>—</strong>
+          </div>
+          <div class="preview-row">
+            <span>Horizonte</span>
+            <strong>48 h</strong>
+          </div>
+          <span class="development-badge">EN DESARROLLO</span>
+        </div>
+      </section>
+
+      <section class="system-section" aria-labelledby="system-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">TRANSPARENCIA DEL MODELO</p>
+            <h2 id="system-title">Estado del sistema</h2>
+          </div>
+          <p>Mostraremos solo resultados que ya hayan sido medidos.</p>
+        </div>
+
+        <div class="mlops-grid">
+          <article class="mlops-card panel">
+            <span class="card-index">01</span>
+            <h3>Último entrenamiento</h3>
+            <p id="card-trained">—</p>
+            <span class="soon">DISPONIBLE EN FASE 2</span>
+          </article>
+          <article class="mlops-card panel">
+            <span class="card-index">02</span>
+            <h3>Precisión de 7 días</h3>
+            <p id="card-accuracy">—</p>
+            <span class="soon">TRAS 7 DÍAS MEDIDOS</span>
+          </article>
+          <article class="mlops-card panel">
+            <span class="card-index">03</span>
+            <h3>Próxima lectura</h3>
+            <p id="card-next-update">—</p>
+            <span class="soon active-soon">ACTUALIZACIÓN HORARIA</span>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-meta">
+        <strong>LikelyCoin</strong>
+        <p id="last-update">Última actualización: —</p>
+      </div>
+      <p class="disclaimer">Proyecto educativo de Machine Learning. La información mostrada no constituye asesoría financiera ni una recomendación de compra o venta.</p>
+      <a href="https://www.coingecko.com/en/api" target="_blank" rel="noopener noreferrer">Datos proporcionados por CoinGecko</a>
+    </footer>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
   <script src="js/app.js"></script>
