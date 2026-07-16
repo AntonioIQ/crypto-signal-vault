@@ -1,0 +1,9 @@
+[build]
+  publish = "public"
+
+[functions]
+  directory = "netlify/functions"
+
+# Scheduled function (task 1.5): hourly anchored prediction / latest.json refresh
+# [functions."predict"]
+#   schedule = "@hourly"

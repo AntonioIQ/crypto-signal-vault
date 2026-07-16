@@ -1,0 +1,4 @@
+# Pinned when Phase 2 starts (task: ml/train.py).
+# Plan A: prophet. Plan B (R-07): statsmodels or lightgbm — artifact contract is model-agnostic.
+pandas
+requests

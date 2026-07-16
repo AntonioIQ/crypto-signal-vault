@@ -1,0 +1,11 @@
+{
+  "name": "crypto-signal-vault",
+  "version": "0.1.0",
+  "description": "Crypto price prediction platform with a zero-cost MLOps pipeline and a RAG analyst chatbot",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/"
+  },
+  "license": "MIT"
+}
