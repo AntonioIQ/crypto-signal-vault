@@ -33,7 +33,17 @@ Resuelta la duda que quedó abierta en la sesión anterior: el snapshot vivo se 
 - Rediseño LikelyCoin desplegado en producción (`3d42b6b`): esfera y emojis decorativos eliminados, identidad geométrica de señal, jerarquía editorial y atribución de CoinGecko.
 - UI productiva verificada: marca LikelyCoin, «Datos al día», precio real, sin errores de consola ni desbordamiento horizontal. QA responsive previo en 1440px/390px.
 - Snapshot fresco observado a las 16:09 CDMX después del redeploy (`stale: false`).
-- Sin bloqueos activos. Falta observar el comportamiento automático del schedule `@hourly`.
+- **Evidencia de 1.5**: `generated_at` avanzó de 14:09 → 16:09 CDMX sin intervención manual, así que el schedule sí dispara. Ojo: corre a las **:09**, no a las :00; la tarjeta «Próxima lectura» promete la hora en punto y llega ~9 min tarde. Faltan 2 corridas más observadas para cerrar 1.5.
+- **Bug corregido en producción**: `change24h()` calculaba el % entre los dos últimos puntos del histórico (congelados) mientras el precio venía vivo del API → mostraba BTC en ▲ 0.0 % verde cuando realmente caía −1.16 %. Ahora ancla el % al precio mostrado y lo oculta si el histórico no cubre esa ventana ±2h. El arreglo quedó absorbido dentro del commit `3d42b6b` del rediseño.
+
+## Hueco abierto: el histórico no se refresca (decisión pendiente)
+
+**Nada actualiza `data/history/`.** El cron horario solo refresca el snapshot de precio; el histórico quedó congelado en el bootstrap (último punto: 15 jul 20:26 CDMX). Consecuencias:
+
+- **16 jul ~22:26 CDMX**: el % de 24h desaparece de la UI (degradación honesta por el guard de ±2h, pero se pierde la métrica).
+- La «gráfica de 30 días» muestra una ventana cada vez más vieja.
+
+Opciones: (a) Action diario que corra `npm run bootstrap:history` y commitee — ~15 líneas, reusa código, y es el mismo paso que `train.yml` va a necesitar en Fase 2; (b) que `predict.mjs` acumule el histórico en Blobs — sin commits diarios, pero cambia arquitectura y el frontend tendría que leerlo de un endpoint; (c) dejarlo y que `train.yml` (Fase 2) lo resuelva en días.
 
 ## Siguiente paso (uno solo)
 
