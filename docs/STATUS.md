@@ -2,7 +2,9 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 16:24 (hora CDMX)
+**Última actualización**: 2026-07-16 17:10 (hora CDMX)
+
+> ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
 ## Fase activa: FASE 1 — Fundación · «la página viva»
 
@@ -15,10 +17,10 @@
 | 1.3 | Key demo de CoinGecko → env vars de Netlify | ☑ Hecha (`COINGECKO_DEMO_API_KEY`) |
 | 1.4 | `predict.mjs` v0: precio actual → snapshot con `stale` | ☑ Hecha y verificada en Netlify |
 | 1.5 | Schedule horario + verificar 3 corridas | ◐ En curso (prueba manual fresca; faltan 3 corridas automáticas) |
-| 1.6 | Bootstrap histórico 30 días → `data/history/` | ☑ Hecha (~720 puntos horarios por activo) |
+| 1.6 | Bootstrap histórico 30 días → `data/history/` | ☑ Hecha (seed de ~720 puntos/activo; el vigente se refresca a Blobs cada 6h) |
 | 1.7 | `index.html` + `app.js`: precio, gráfica, estados, responsive | ☑ Hecha (rediseño profesional LikelyCoin verificado en 390px y desktop) |
 | 1.8 | Footer disclaimer + timestamp CDMX | ☑ Hecha |
-| 1.9 | `ci.yml` con validación de schema de `latest.json` | ☑ Hecha (17 tests verdes) |
+| 1.9 | `ci.yml` con validación de schema de `latest.json` | ☑ Hecha (28 tests verdes) |
 | 1.10 | Checklist de QA y cierre de fase | ☐ Pendiente (requiere sitio vivo) |
 
 ## Arquitectura del refresh (decisión cerrada)
@@ -36,15 +38,12 @@ Resuelta la duda que quedó abierta en la sesión anterior: el snapshot vivo se 
 - **Evidencia de 1.5**: `generated_at` avanzó de 14:09 → 16:09 CDMX sin intervención manual, así que el schedule sí dispara. Ojo: corre a las **:09**, no a las :00; la tarjeta «Próxima lectura» promete la hora en punto y llega ~9 min tarde. Faltan 2 corridas más observadas para cerrar 1.5.
 - **Bug corregido en producción**: `change24h()` calculaba el % entre los dos últimos puntos del histórico (congelados) mientras el precio venía vivo del API → mostraba BTC en ▲ 0.0 % verde cuando realmente caía −1.16 %. Ahora ancla el % al precio mostrado y lo oculta si el histórico no cubre esa ventana ±2h. El arreglo quedó absorbido dentro del commit `3d42b6b` del rediseño.
 
-## Hueco abierto: el histórico no se refresca (decisión pendiente)
+## Hueco del histórico congelado: RESUELTO
 
-**Nada actualiza `data/history/`.** El cron horario solo refresca el snapshot de precio; el histórico quedó congelado en el bootstrap (último punto: 15 jul 20:26 CDMX). Consecuencias:
+El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ventana de 30 días en Blobs cada 6h y `GET /api/history?asset=` la sirve; `data/history/` quedó como seed de fallback. Se descartó la opción del Action diario que commitea: **habría costado 450 créditos/mes contra un presupuesto de 300** (ver `06_PRESUPUESTO.md`).
 
-- **16 jul ~22:26 CDMX**: el % de 24h desaparece de la UI (degradación honesta por el guard de ±2h, pero se pierde la métrica).
-- La «gráfica de 30 días» muestra una ventana cada vez más vieja.
-
-Opciones: (a) Action diario que corra `npm run bootstrap:history` y commitee — ~15 líneas, reusa código, y es el mismo paso que `train.yml` va a necesitar en Fase 2; (b) que `predict.mjs` acumule el histórico en Blobs — sin commits diarios, pero cambia arquitectura y el frontend tendría que leerlo de un endpoint; (c) dejarlo y que `train.yml` (Fase 2) lo resuelva en días.
+**Implicación pendiente para Fase 2**: el diseño original decía commitear `models/model_YYYYMMDD.json` a diario. Eso tampoco cabe en el presupuesto. `train.yml` deberá escribir el artefacto a Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` sin tocar el repo.
 
 ## Siguiente paso (uno solo)
 
-➡️ Verificar que `generated_at` avance en **3 corridas automáticas consecutivas** de `@hourly`; después ejecutar el checklist 1.10 y cerrar la Fase 1.
+➡️ Verificar en producción que `refresh-history` escribió su blob (`GET /api/history?asset=btc` debe responder 200 con `generated_at` de hoy) y que `generated_at` de `/api/latest` avance en **3 corridas consecutivas**; después ejecutar el checklist 1.10 y cerrar la Fase 1.

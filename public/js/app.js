@@ -1,6 +1,7 @@
 // LikelyCoin — dashboard (Front-UX, tasks 1.7 / 1.8)
 // Data flow: /api/latest (Blobs-backed function) with fallback to the static
-// seed /data/latest.json; 30-day history from static /data/history/<asset>.json.
+// seed /data/latest.json; 30-day history from /api/history with the static
+// /data/history/<asset>.json build seed as fallback.
 
 const TIMEZONE = 'America/Mexico_City';
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000; // >2h without ingestion = stale
@@ -57,6 +58,17 @@ async function loadSnapshot() {
     return await fetchJson('/api/latest');
   } catch {
     return fetchJson('data/latest.json');
+  }
+}
+
+// Same shape: the refreshed window lives in Blobs, and the build seed is the
+// floor. The seed is frozen at bootstrap time, so it may be old enough that
+// change24h() declines to show a figure — that is the intended degradation.
+async function loadHistory(asset) {
+  try {
+    return await fetchJson(`/api/history?asset=${asset}`);
+  } catch {
+    return fetchJson(`data/history/${asset}.json`);
   }
 }
 
@@ -235,8 +247,8 @@ async function init() {
   try {
     const [snapshot, btc, eth] = await Promise.all([
       loadSnapshot(),
-      fetchJson('data/history/btc.json'),
-      fetchJson('data/history/eth.json'),
+      loadHistory('btc'),
+      loadHistory('eth'),
     ]);
     state.snapshot = snapshot;
     state.history = { btc, eth };

@@ -98,9 +98,25 @@ contrato:
 
 `asset` usa la key interna (`btc` o `eth`), `coin_id` usa el identificador de
 CoinGecko y `points` se ordena ascendentemente por `timestamp`. Cada punto tiene
-un timestamp ISO-8601 y un precio positivo. El histórico cachea entre 30 y 365
-días y los procesos posteriores solicitan únicamente el delta cuando sea
-posible.
+un timestamp ISO-8601 y un precio positivo.
+
+**Dónde vive y quién lo refresca.** El histórico vigente es un blob por activo
+en el store `market-data`, bajo la key `history/<asset>.json`; lo expone
+`GET /api/history?asset=btc`. Los archivos de `data/history/` en el repo son el
+**seed versionado** que el build copia a `public/data/`: el frontend pide el
+endpoint y cae al seed si no hay blob válido (404) o si el storage falla.
+
+`netlify/functions/refresh-history.mjs` corre cada 6 horas y **reescribe la
+ventana completa de 30 días** en lugar de agregar el punto más reciente. El
+overwrite es idempotente y auto-sanable: una corrida perdida no deja hueco que
+reconciliar, y con 4 corridas diarias hay 3 reintentos antes de que algo se
+degrade (el % de 24h aguanta hasta 26h de histórico viejo). Cuesta ~240
+llamadas/mes a CoinGecko contra una cuota de 10,000.
+
+Esto reemplaza la idea original de refrescar el histórico commiteando el delta
+desde el job de entrenamiento: **cada commit a `main` es un deploy de 15
+créditos** y un refresh diario por commit costaría 450 créditos/mes contra un
+presupuesto de 300. Ver `06_PRESUPUESTO.md`.
 
 #### 2.3 Contratos de fases posteriores
 
@@ -133,7 +149,7 @@ CONTEXTO:
 
 ```
 crypto-signal-vault/
-├── netlify.toml                  # build, redirects, cron de scheduled fn
+├── netlify.toml                  # build, ignore de docs, redirects, crons
 ├── package.json                  # deps de functions (groq via fetch nativo)
 ├── public/                       # frontend estático (publish dir)
 │   ├── index.html
@@ -142,26 +158,35 @@ crypto-signal-vault/
 │   ├── js/chat.js                # UI del analista
 │   └── data/                     # copia de seeds/fixtures durante el build
 ├── netlify/functions/
-│   ├── predict.mjs               # scheduled, horario
+│   ├── predict.mjs               # scheduled, horario: precio → blob
+│   ├── refresh-history.mjs       # scheduled, cada 6h: ventana 30d → blob
 │   ├── latest.mjs                # GET /api/latest: blob + fallback versionado
+│   ├── history.mjs               # GET /api/history?asset=: blob, 404 → seed
 │   └── chat.mjs                  # on-demand, Groq + rate limit
 ├── ml/
 │   ├── train.py                  # entrenamiento + serialización
 │   ├── evaluate.py               # resolución de predicciones + drift
 │   ├── features.py
 │   └── requirements.txt
-├── models/                       # artefactos versionados
-├── metrics/                      # métricas por entrenamiento + rolling
-├── data/                         # seeds/fixtures, history y logs versionados
+├── models/                       # seed del artefacto; el vigente vive en Blobs
+├── metrics/                      # seed de métricas; las vigentes en Blobs
+├── data/                         # seeds/fixtures de latest.json e history/
 ├── .github/workflows/
+│   ├── ci.yml                    # pruebas + build
 │   ├── train.yml
 │   └── evaluate.yml
-├── docs/                         # documentos 00–05
+├── docs/                         # documentos 00–06
 └── tests/
     ├── test_features.py
     ├── test_train_contract.py    # valida schema de artefactos
-    └── functions.test.mjs        # rate limit, fallbacks del chat
+    ├── market-contract.test.mjs  # contrato de snapshot e histórico
+    ├── functions.test.mjs        # latest/predict: fallbacks y stale
+    └── history-functions.test.mjs # refresh/history: aislamiento y 404 → seed
 ```
+
+**Nada mutable se versiona.** `models/`, `metrics/` y `data/` guardan seeds y
+fixtures; lo que cambia a diario u horariamente vive en Blobs, porque cada
+commit a `main` cuesta un deploy (`06_PRESUPUESTO.md`).
 
 ### 5. Cuota de Groq
 
@@ -179,11 +204,17 @@ El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y co
 
 | Hora (UTC) | Proceso | Dónde |
 |---|---|---|
-| 07:00 diario | Entrenamiento + artefacto + métricas | GitHub Actions |
+| 07:00 diario | Entrenamiento + artefacto + métricas → **a Blobs, no al repo** | GitHub Actions |
 | 07:30 diario | Evaluación de aciertos + drift | GitHub Actions |
 | :00 cada hora | Ingesta/anclaje + refresh de `market-data/latest.json` | Netlify Scheduled Fn |
+| cada 6 h | Refresh de `market-data/history/<asset>.json` (ventana de 30 días) | Netlify Scheduled Fn |
 | on-demand | Chat del analista | Netlify Function |
-| en cada push a `main` | Redeploy del sitio | Netlify CI |
+| en cada push a `main` con código | Redeploy del sitio (**15 créditos**) | Netlify CI |
+| en cada push a `main` solo con docs | Build cancelado por el comando `ignore` (0 créditos) | Netlify CI |
+
+**Observado en producción**: el schedule `@hourly` de Netlify dispara alrededor
+de los **:09**, no en punto. La UI no debe prometer una hora exacta de la
+próxima lectura.
 
 ### 8. Seguridad y privacidad
 

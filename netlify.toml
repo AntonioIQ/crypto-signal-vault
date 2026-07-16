@@ -1,6 +1,10 @@
 [build]
   command = "npm run build"
   publish = "public"
+  # A production deploy costs 15 of the 300 monthly credits (docs/06_PRESUPUESTO.md),
+  # so docs-only pushes must not build. Exit 0 cancels the build: that happens when
+  # the diff touches nothing outside docs/ and *.md.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs/' ':(exclude)*.md'"
 
 [functions]
   directory = "netlify/functions"
@@ -8,8 +12,20 @@
 [functions."predict"]
   schedule = "@hourly"
 
+# Every 6 hours is enough: the chart needs a 30-day window and the 24h change
+# only breaks once history is >26h stale, so a failed run still has 3 retries
+# before anything degrades.
+[functions."refresh-history"]
+  schedule = "0 */6 * * *"
+
 [[redirects]]
   from = "/api/latest"
   to = "/.netlify/functions/latest"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/history"
+  to = "/.netlify/functions/history"
   status = 200
   force = true

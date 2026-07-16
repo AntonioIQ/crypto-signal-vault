@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-07-16 — El presupuesto de Netlify redefine la arquitectura del estado
+
+**El hallazgo:** la cuenta Free tiene **300 créditos/mes y cada production deploy cuesta 15** — todo lo demás (requests, compute, bandwidth) suma <1 crédito. El presupuesto real son **~20 deploys/mes**, y **si se agotan los créditos el sitio se pausa**. Documentado en el nuevo [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).
+
+**Lo que esto mató:** la propuesta de refrescar el histórico con un Action diario que commitea. Un commit diario = un deploy diario = **450 créditos/mes contra 300 disponibles**: aritméticamente imposible. La misma cuenta invalida el plan original de commitear `models/model_YYYYMMDD.json` a diario en Fase 2.
+
+**La regla que queda:** el repo solo cambia cuando cambia **código**; todo estado mutable vive en **Netlify Blobs**. Agregada a las reglas de oro de `CLAUDE.md` y `AGENTS.md`.
+
+**Hecho:**
+- `refresh-history.mjs`: scheduled cada 6h, reescribe la ventana completa de 30 días en Blobs (overwrite idempotente y auto-sanable: una corrida perdida no deja hueco, y hay 3 reintentos antes de que el % de 24h se degrade a las 26h). ~240 llamadas/mes a CoinGecko contra una cuota de 10k.
+- `history.mjs`: `GET /api/history?asset=` sirve el blob; 404 ante blob ausente o corrupto para que el cliente use el seed del build.
+- `isValidHistoryDocument()` en el contrato: valida lo que se lee de Blobs, incluido que el activo coincida con la key.
+- Frontend: `loadHistory()` pide el endpoint y cae al seed estático. Verificado local: sin endpoint, cae al seed y la gráfica renderiza los 721 puntos.
+- **`ignore` en `netlify.toml`**: los pushes que solo tocan `docs/` o `*.md` cancelan el build. Con STATUS/BITACORA actualizándose cada sesión, esto solo salva varios deploys al mes (el commit de STATUS de hoy costó 15 créditos por puro texto).
+- 28 pruebas verdes (11 nuevas: aislamiento por activo, ventana previa preservada ante fallo del proveedor, 404 → seed, 400 en activo desconocido, 405, outage de storage).
+
+**Observado en producción:** el schedule `@hourly` de Netlify dispara ~a los **:09**, no en punto. La tarjeta «Próxima lectura» promete la hora exacta y llega ~9 min tarde — pendiente de corregir.
+
+**Siguiente:** verificar el blob del histórico en producción, 3 corridas de `@hourly`, y cerrar 1.10.
+
+---
+
 ## 2026-07-16 — Primer deploy productivo en Netlify (1.2–1.4)
 
 **Hecho:**

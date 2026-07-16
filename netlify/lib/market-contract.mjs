@@ -195,6 +195,33 @@ export function createStaleSnapshot(previousSnapshot) {
   return snapshot;
 }
 
+// Guards what we read back out of Blobs: a corrupt or foreign document must be
+// rejected so the client falls back to the seed instead of rendering garbage.
+export function isValidHistoryDocument(document, expectedAsset) {
+  if (!isRecord(document)) return false;
+
+  const metadata = ASSETS[document.asset];
+
+  if (
+    !metadata ||
+    document.schema_version !== SCHEMA_VERSION ||
+    document.coin_id !== metadata.id ||
+    document.currency !== CURRENCY ||
+    !isIsoTimestamp(document.generated_at, OFFSET_TIMESTAMP_PATTERN) ||
+    !Array.isArray(document.points) ||
+    document.points.length === 0
+  ) {
+    return false;
+  }
+
+  if (expectedAsset !== undefined && document.asset !== expectedAsset) return false;
+
+  return document.points.every(
+    (point) =>
+      isRecord(point) && isIsoTimestamp(point.timestamp) && isPositiveNumber(point.price),
+  );
+}
+
 export function createHistoryDocument({ asset, points, generatedAt = new Date() }) {
   const metadata = ASSETS[asset];
 
