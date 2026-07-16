@@ -18,8 +18,13 @@
 | **Production deploy** | **15 créditos c/u** | **el único costo que importa** |
 | Deploy preview / branch deploy | **gratis** | iterar aquí sale $0 |
 | Web requests | 2 créditos / 10,000 | ~0 |
-| Functions compute | 10 créditos / GB-hora | la horaria consume <1 crédito/mes |
+| Functions compute | 10 créditos / GB-hora | ~16 créditos/mes con los crons actuales |
 | Web bandwidth | 20 créditos / 1 GB | ~6,600 visitas ≈ 20 créditos |
+
+**Los crons no son el enemigo.** Se pagan por GB-hora, no por deploy: subir
+`predict` de cada hora a cada 15 minutos cuesta ~12 créditos/mes más — menos que
+un solo deploy. Si una cadencia mejora el producto y cabe en la cuota de
+CoinGecko (ver §3.6), no hay razón presupuestal para diferirla.
 
 **Conclusión aritmética: el presupuesto real son ~20 production deploys al mes.** Al 16 jul quedan **~17**. Todo lo demás es ruido.
 
@@ -31,6 +36,7 @@
 3. **Batchear.** Varios cambios de código en un solo push a `main`. Un push por commit es un lujo de 15 créditos cada uno.
 4. **Iterar en ramas.** `feature/*` y `dev` producen branch deploys **gratuitos**. Se prueba ahí; a `main` se llega ya verificado.
 5. **Ante la duda, contar deploys.** Antes de proponer un flujo automático, multiplica su frecuencia × 15 créditos × 30 días y compáralo contra 300.
+6. **La otra cuota es CoinGecko**: plan Demo = **100 llamadas/min y 10,000 créditos/mes**. Ese, y no Netlify, es el techo de la frecuencia de los crons. Consumo actual: `predict` cada 15 min (~2,880/mes) + `refresh-history` cada 6h (~240/mes) = **~3,120, el 31% de la cuota**.
 
 ## 4. Implicaciones ya aplicadas
 

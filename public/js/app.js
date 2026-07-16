@@ -4,7 +4,8 @@
 // /data/history/<asset>.json build seed as fallback.
 
 const TIMEZONE = 'America/Mexico_City';
-const STALE_AFTER_MS = 2 * 60 * 60 * 1000; // >2h without ingestion = stale
+const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
+const STALE_AFTER_MS = 60 * 60 * 1000; // 4 missed runs: no longer "al día"
 const ANCHOR_TOLERANCE_MS = 2 * 60 * 60 * 1000; // max drift for the 24h anchor
 
 const els = {
@@ -93,10 +94,12 @@ function renderStatus(snapshot) {
   els.lastUpdate.textContent =
     `Última actualización: ${timeFmt.format(new Date(snapshot.generated_at))} (hora CDMX)`;
 
-  const next = new Date();
-  next.setMinutes(0, 0, 0);
-  next.setHours(next.getHours() + 1);
-  els.nextUpdate.textContent = `${timeFmt.format(next)} (CDMX)`;
+  // Anchored to the last real run, not to a wall-clock boundary: Netlify fires
+  // the schedule a few minutes late, so promising an exact slot would be a
+  // promise we don't control. Once that estimate passes, stop naming a time.
+  const next = new Date(new Date(snapshot.generated_at).getTime() + REFRESH_INTERVAL_MS);
+  els.nextUpdate.textContent =
+    next.getTime() > Date.now() ? `${timeFmt.format(next)} (CDMX)` : 'En cualquier momento';
 }
 
 // Compares the displayed price against the history point closest to 24h

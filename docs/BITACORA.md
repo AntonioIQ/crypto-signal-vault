@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-16 — Precio cada 15 minutos: «EN VIVO» se vuelve cierto
+
+**El planteamiento de Antonio:** ¿por qué no cada 15 min desde ya, en vez de diferirlo a una fase posterior? Tenía razón: cambiar el schedule es **una línea de configuración**, no una feature, y el argumento de diferirlo se caía solo — íbamos a hacer un deploy de todas formas para corregir el copy, y subiendo la cadencia ese copy ya no necesita corrección.
+
+**La cuota que sí manda:** verificada la de CoinGecko Demo = **100 llamadas/min, 10,000 créditos/mes**. `predict` cada 15 min (~2,880/mes) + `refresh-history` cada 6h (~240) = **31% de la cuota**. Cada 5 min llegaría al 89%: ahí sí está el techo. En Netlify el costo es de ~16 créditos/mes de compute (los crons se pagan por GB-hora, no por deploy).
+
+**Hecho:**
+- `predict` pasa de `@hourly` a `*/15 * * * *`, 24/7.
+- Copy alineado con la realidad: «Frecuencia: cada 15 minutos» y badge «CADA 15 MINUTOS».
+- **«Próxima lectura» ya no miente**: se calcula como `generated_at + 15 min` (anclada a la última corrida real, no a la frontera de reloj) y dice «En cualquier momento» cuando esa estimación pasa. Antes prometía la hora en punto y el scheduler llegaba a los :05–:09.
+- Umbral de `stale` de 2h → **1h** (4 corridas perdidas): con cadencia de 15 min, seguir diciendo «Datos al día» a las 2 horas era la misma sobrepromesa que «EN VIVO».
+
+**Descartado:** restringir los crons a ciertas horas del día. Ahorra una cuota que no falta (estamos al 31%) y rompe el propósito de portafolio: los visitantes están en cualquier huso horario y el cripto se mueve 24/7 — de madrugada el sitio mostraría un precio de 8 horas y parecería abandonado.
+
+**Verificado local:** con snapshot de hace 49 min → «En cualquier momento»; con snapshot recién generado (17:54) → «18:09 (CDMX)». 28 pruebas verdes.
+
+---
+
 ## 2026-07-16 — El presupuesto de Netlify redefine la arquitectura del estado
 
 **El hallazgo:** la cuenta Free tiene **300 créditos/mes y cada production deploy cuesta 15** — todo lo demás (requests, compute, bandwidth) suma <1 crédito. El presupuesto real son **~20 deploys/mes**, y **si se agotan los créditos el sitio se pausa**. Documentado en el nuevo [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).

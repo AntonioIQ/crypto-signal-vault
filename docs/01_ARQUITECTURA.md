@@ -206,15 +206,28 @@ El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y co
 |---|---|---|
 | 07:00 diario | Entrenamiento + artefacto + métricas → **a Blobs, no al repo** | GitHub Actions |
 | 07:30 diario | Evaluación de aciertos + drift | GitHub Actions |
-| :00 cada hora | Ingesta/anclaje + refresh de `market-data/latest.json` | Netlify Scheduled Fn |
+| cada 15 min | Ingesta/anclaje + refresh de `market-data/latest.json` | Netlify Scheduled Fn |
 | cada 6 h | Refresh de `market-data/history/<asset>.json` (ventana de 30 días) | Netlify Scheduled Fn |
 | on-demand | Chat del analista | Netlify Function |
 | en cada push a `main` con código | Redeploy del sitio (**15 créditos**) | Netlify CI |
 | en cada push a `main` solo con docs | Build cancelado por el comando `ignore` (0 créditos) | Netlify CI |
 
-**Observado en producción**: el schedule `@hourly` de Netlify dispara alrededor
-de los **:09**, no en punto. La UI no debe prometer una hora exacta de la
-próxima lectura.
+**Observado en producción**: el scheduler de Netlify dispara con varios minutos
+de retraso y a minutos variables (se observó :09 y :05, no en punto). Por eso la
+tarjeta «Próxima lectura» se calcula como `generated_at + 15 min` —anclada a la
+última corrida real, no a una frontera de reloj— y cuando esa estimación pasa
+dice «En cualquier momento» en lugar de nombrar una hora que no controlamos.
+
+**Por qué 15 minutos y no una hora**: la tarjeta de precio dice «EN VIVO», y con
+cadencia horaria eso era falso hasta por 55 minutos. Cuesta ~2,880 de los 10,000
+créditos mensuales de CoinGecko (31%) y ~16 de los 300 de Netlify. **Corre 24/7 a
+propósito**: es un sitio de portafolio con visitantes en cualquier huso horario y
+el cripto se mueve todo el día; una ventana nocturna sin refresh mostraría un
+precio de 8 horas de antigüedad a quien lo abra de madrugada.
+
+**Umbral de `stale`**: el frontend marca «Datos de hace N horas» pasada 1 hora sin
+ingesta — 4 corridas perdidas. Por debajo de eso, la deriva del scheduler no debe
+disparar falsas alarmas.
 
 ### 8. Seguridad y privacidad
 
