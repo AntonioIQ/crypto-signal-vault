@@ -2,11 +2,13 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 18:25 (hora CDMX)
+**Última actualización**: 2026-07-16 18:50 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: FASE 1 — Fundación · «la página viva»
+## Fase activa: ninguna — FASE 1 CERRADA ✅ (2026-07-16); FASE 2 lista para arrancar
+
+### FASE 1 — Fundación · «la página viva» — CERRADA
 
 **Objetivo**: sitio público en Netlify que muestra precio BTC/ETH actualizado cada hora con gráfica de 30 días. *(Entregado por encima del objetivo: la cadencia real es cada 15 min.)*
 
@@ -21,7 +23,7 @@
 | 1.7 | `index.html` + `app.js`: precio, gráfica, estados, responsive | ☑ Hecha (rediseño profesional LikelyCoin verificado en 390px y desktop) |
 | 1.8 | Footer disclaimer + timestamp CDMX | ☑ Hecha |
 | 1.9 | `ci.yml` con validación de schema de `latest.json` | ☑ Hecha (28 tests verdes) |
-| 1.10 | Checklist de QA y cierre de fase | ☐ Pendiente — **es lo único que falta de la Fase 1** |
+| 1.10 | Checklist de QA y cierre de fase | ☑ Hecha. Checklist 9/9 (Lighthouse: perf 94, a11y 100). Resumen en `CHANGELOG.md`. |
 
 ## Arquitectura del refresh (decisión cerrada)
 
@@ -56,4 +58,6 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Verificar en producción que `refresh-history` escribió su blob (`GET /api/history?asset=btc` debe responder 200 con `generated_at` de hoy) y que `generated_at` de `/api/latest` avance en **3 corridas consecutivas**; después ejecutar el checklist 1.10 y cerrar la Fase 1.
+➡️ **Arrancar la FASE 2 — Modelo · «la línea punteada»** (`05_PLAN_EJECUCION.md`): `ml/features.py`, `ml/train.py`, `train.yml` diario, artefacto de forecast 48h pre-computado, anclaje en `predict.mjs`, indicador de dirección + confianza en UI.
+
+**Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.

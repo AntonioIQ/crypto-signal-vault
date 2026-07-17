@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-16 — FASE 1 CERRADA ✅ (checklist 1.10: 9/9)
+
+**Checklist ejecutado contra producción, no contra suposiciones:**
+- Estado de **error** forzado (sitio servido sin datos): banner rojo, «Sin datos», sin % inventado. Estado **stale** forzado (snapshot de −5h): «Datos de hace 5 horas», precio último conocido, «En cualquier momento». **Cargando** garantizado por construcción; **fresco** observado en producción.
+- Móvil 390px y desktop sin desbordamiento horizontal (medido con `scrollWidth` vs `innerWidth`, no a ojo).
+- **Lighthouse (primera medición del proyecto): performance 94, accesibilidad 100, best practices 96, SEO 100** — los umbrales eran ≥85 y ≥90.
+- Sin claves ni logs de debug en el cliente (solo un `console.error` legítimo en la ruta de error).
+- Disclaimers renderizados en footer y sección de predicción.
+
+**Cierre:** resumen completo de la fase en `CHANGELOG.md`. Entregable: https://likelycoin.netlify.app operando 24/7 a costo $0, con 5+ corridas automáticas verificadas del cron de 15 min y el histórico auto-refrescándose cada 6h.
+
+**Siguiente:** FASE 2 — el modelo y la línea punteada. Restricción ya decidida: el artefacto va a Blobs vía `train.yml` (secrets `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID`), nunca commiteado.
+
+---
+
 ## 2026-07-16 — Precio cada 15 minutos: «EN VIVO» se vuelve cierto
 
 **El planteamiento de Antonio:** ¿por qué no cada 15 min desde ya, en vez de diferirlo a una fase posterior? Tenía razón: cambiar el schedule es **una línea de configuración**, no una feature, y el argumento de diferirlo se caía solo — íbamos a hacer un deploy de todas formas para corregir el copy, y subiendo la cadencia ese copy ya no necesita corrección.
