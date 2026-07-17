@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-16 — Fase 2 iniciada: núcleo del modelo, publicación y anclaje
+
+**Arquitectura primero:**
+- Contrato `forecast-artifact/1.0` documentado con 48 factores relativos, dirección `up/down/flat`, confianza rolling-origin separada de accuracy, frescura/expiración y rollback `latest → previous`.
+- Estado mutable del modelo en Netlify Blobs (`model-artifacts`); el workflow diario no hace commits, pushes ni deploys.
+- Snapshot público extendido de forma compatible con un bloque `forecast` anclado al precio vivo.
+
+**Implementado en `feature/phase-2-model`:**
+- `ml/features.py` y `ml/train.py`: Prophet lazy, histórico reciente/contiguo sin interpolación, 48 pasos, validación estricta, confianza con mínimo 20 folds y CLI offline atómico.
+- Prophet 1.3.0 probado realmente con históricos públicos frescos: 42 ajustes BTC/ETH en ~17 s y artefacto válido.
+- `train.yml` diario + publicador Blobs con versión inmutable, read-back fuerte byte a byte, rollback y gate obligatorio a `main`.
+- Anclaje runtime en `predict.mjs`: fresh/stale/unavailable independiente del precio; 48 timestamps/precios sin exponer factores internos.
+
+**QA:**
+- ML offline y workflow/publicador aprobados después de corregir hallazgos de frescura, huecos, versionado, falso `modified:true`, validación JS y dispatch desde ramas.
+- Estado al checkpoint: **26 pruebas Python y 57 Node verdes**; `git diff --check` limpio.
+
+**Bloqueante externo para la primera publicación real:** faltan en GitHub Actions `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID`. Los valores no deben compartirse por chat.
+
+**Siguiente:** repase QA del anclaje runtime, frontend con línea punteada/dirección/confianza y revisión final de Claude antes del merge único a `main`.
+
+---
+
 ## 2026-07-16 — FASE 1 CERRADA ✅ (checklist 1.10: 9/9)
 
 **Checklist ejecutado contra producción, no contra suposiciones:**

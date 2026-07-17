@@ -1,4 +1,9 @@
 import { ASSETS } from "./coingecko.mjs";
+import {
+  agePublicForecast,
+  assertValidPublicForecast,
+  unavailableForecast,
+} from "./forecast-contract.mjs";
 
 export const SCHEMA_VERSION = "1.0";
 export const TIMEZONE = "America/Mexico_City";
@@ -120,6 +125,10 @@ export function assertValidSnapshot(snapshot) {
     }
   }
 
+  if (Object.hasOwn(snapshot, "forecast")) {
+    assertValidPublicForecast(snapshot.forecast);
+  }
+
   return snapshot;
 }
 
@@ -154,7 +163,11 @@ export function createSeedSnapshot() {
   };
 }
 
-export function createFreshSnapshot(prices, generatedAt = new Date()) {
+export function createFreshSnapshot(
+  prices,
+  generatedAt = new Date(),
+  forecast = unavailableForecast(),
+) {
   if (!isRecord(prices)) {
     throw new ContractValidationError("Prices must be an object.");
   }
@@ -179,17 +192,19 @@ export function createFreshSnapshot(prices, generatedAt = new Date()) {
         ];
       }),
     ),
+    forecast: clone(forecast),
   };
 
   assertValidSnapshot(snapshot);
   return snapshot;
 }
 
-export function createStaleSnapshot(previousSnapshot) {
+export function createStaleSnapshot(previousSnapshot, now = new Date()) {
   assertValidSnapshot(previousSnapshot);
 
   const snapshot = clone(previousSnapshot);
   snapshot.stale = true;
+  snapshot.forecast = agePublicForecast(previousSnapshot.forecast, now);
 
   assertValidSnapshot(snapshot);
   return snapshot;

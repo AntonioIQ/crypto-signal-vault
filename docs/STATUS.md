@@ -2,11 +2,22 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 18:50 (hora CDMX)
+**Última actualización**: 2026-07-16 19:31 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — FASE 1 CERRADA ✅ (2026-07-16); FASE 2 lista para arrancar
+## Fase activa: FASE 2 — Modelo · «la línea punteada»
+
+**Rama de trabajo**: `feature/phase-2-model` (sin deploy de producción).
+
+| # | Paquete | Estado |
+|---|---|---|
+| 2.1 | Contrato `forecast-artifact/1.0` + snapshot anclado | ☑ Documentado antes del código |
+| 2.2 | `ml/features.py` + `ml/train.py` + Prophet + validación rolling-origin | ☑ Implementado y aprobado por QA; Prophet real verificado |
+| 2.3 | `train.yml` diario + publicador seguro a Netlify Blobs | ☑ Implementado y aprobado por QA; falta prueba real con secrets |
+| 2.4 | Lectura `latest → previous`, anclaje 48h en `predict.mjs` | ◐ Implementado; 57 Node + 26 Python verdes, pendiente repase formal de QA |
+| 2.5 | Línea punteada + dirección + confianza en UI | ☐ Pendiente |
+| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ☐ Pendiente |
 
 ### FASE 1 — Fundación · «la página viva» — CERRADA
 
@@ -64,7 +75,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Arrancar la FASE 2 — Modelo · «la línea punteada»** (`05_PLAN_EJECUCION.md`): `ml/features.py`, `ml/train.py`, `train.yml` diario, artefacto de forecast 48h pre-computado, anclaje en `predict.mjs`, indicador de dirección + confianza en UI.
+➡️ Reanudar en `feature/phase-2-model`: pasar el anclaje runtime por QA-Guardian y después implementar la línea punteada + indicador en UI.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 

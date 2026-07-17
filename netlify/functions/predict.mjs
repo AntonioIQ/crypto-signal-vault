@@ -2,9 +2,15 @@ import { getStore } from "@netlify/blobs";
 
 import { fetchCurrentPrices } from "../lib/coingecko.mjs";
 import {
+  MODEL_ARTIFACTS_STORE,
+  anchorForecast,
+  readUsableForecastArtifact,
+} from "../lib/forecast-contract.mjs";
+import {
   createFreshSnapshot,
   createSeedSnapshot,
   createStaleSnapshot,
+  formatMexicoCityTimestamp,
   isValidSnapshot,
 } from "../lib/market-contract.mjs";
 
@@ -40,11 +46,29 @@ export async function runPrediction({
 
   try {
     const prices = await fetchPrices();
-    snapshot = createFreshSnapshot(prices, clock());
+    const anchoredAt = clock();
+    snapshot = createFreshSnapshot(prices, anchoredAt);
+
+    try {
+      const modelStore = getStoreFn(MODEL_ARTIFACTS_STORE);
+      const selected = await readUsableForecastArtifact(modelStore, anchoredAt);
+      if (selected) {
+        const forecast = anchorForecast(
+          selected.artifact,
+          selected.status,
+          snapshot,
+          formatMexicoCityTimestamp,
+        );
+        snapshot = createFreshSnapshot(prices, anchoredAt, forecast);
+      }
+    } catch {
+      // Forecast storage and validation are isolated from live market ingestion.
+    }
+
     status = "fresh";
   } catch {
     snapshot = previousSnapshot
-      ? createStaleSnapshot(previousSnapshot)
+      ? createStaleSnapshot(previousSnapshot, clock())
       : seedFactory();
     status = "stale";
   }

@@ -118,10 +118,282 @@ desde el job de entrenamiento: **cada commit a `main` es un deploy de 15
 créditos** y un refresh diario por commit costaría 450 créditos/mes contra un
 presupuesto de 300. Ver `06_PRESUPUESTO.md`.
 
-#### 2.3 Contratos de fases posteriores
+#### 2.3 Artefacto canónico de forecast de Fase 2
 
-- **Artefacto del modelo** — el Action **pre-computa el forecast completo de 48h** (pasos horarios) y lo serializa. La scheduled function **solo lo ancla** al precio actual (ajuste de nivel). Esto elimina toda inferencia pesada del lado de Netlify y hace el contrato **agnóstico al modelo** (Prophet, statsmodels, GBM: da igual).
-- **`data/predictions_log.json`** — append-only, rotación mensual:
+El artefacto vigente vive en Netlify Blobs, en el store site-wide
+`model-artifacts` y bajo la key canónica `forecast/latest.json`. El runtime no
+lee un artefacto diario del repo. Para recuperación se conservan también
+`forecast/previous.json` y la copia inmutable
+`forecast/versions/<artifact_version>.json`; todas estas keys están en el mismo
+store. El volumen es mínimo y se mantiene dentro del plan gratuito.
+
+El documento es JSON versionado y **agnóstico al modelo**. `train.yml` puede
+producirlo con Prophet, statsmodels, GBM u otro algoritmo, pero sus consumidores
+solo conocen factores relativos, timestamps y métricas con semántica estable.
+Los metadatos de `producer` son informativos: ninguna Function ni componente de
+UI puede decidir su lógica a partir del nombre del algoritmo.
+
+```json
+{
+  "schema_version": "forecast-artifact/1.0",
+  "artifact_version": "20260717T070000Z-a1b2c3d-gh987654321-1",
+  "artifact_type": "relative_hourly_forecast",
+  "generated_at": "2026-07-17T01:00:00-06:00",
+  "data_through": "2026-07-17T00:00:00-06:00",
+  "valid_until": "2026-07-18T13:00:00-06:00",
+  "expires_at": "2026-07-20T01:00:00-06:00",
+  "timezone": "America/Mexico_City",
+  "currency": "usd",
+  "horizon_hours": 48,
+  "step_hours": 1,
+  "direction_policy": {
+    "horizon_hours": 48,
+    "flat_threshold_return": 0.005
+  },
+  "producer": {
+    "model_id": "opaque-model-id",
+    "code_revision": "a1b2c3d",
+    "run_id": "gh987654321-1"
+  },
+  "assets": {
+    "btc": {
+      "id": "bitcoin",
+      "symbol": "BTC",
+      "reference": {
+        "price": 65000.25,
+        "observed_at": "2026-07-17T00:00:00-06:00"
+      },
+      "forecast": [
+        { "offset_hours": 1, "return_factor": 1.0004 },
+        { "offset_hours": 2, "return_factor": 1.0007 },
+        { "offset_hours": 48, "return_factor": 1.018 }
+      ],
+      "summary": {
+        "terminal_return": 0.018,
+        "direction": "up",
+        "confidence": {
+          "value": 72.5,
+          "status": "available",
+          "method": "rolling_origin_48h_residuals",
+          "sample_size": 40
+        }
+      }
+    },
+    "eth": {
+      "id": "ethereum",
+      "symbol": "ETH",
+      "reference": {
+        "price": 3500.75,
+        "observed_at": "2026-07-17T00:00:00-06:00"
+      },
+      "forecast": [
+        { "offset_hours": 1, "return_factor": 0.9998 },
+        { "offset_hours": 2, "return_factor": 0.9995 },
+        { "offset_hours": 48, "return_factor": 0.993 }
+      ],
+      "summary": {
+        "terminal_return": -0.007,
+        "direction": "down",
+        "confidence": {
+          "value": null,
+          "status": "insufficient_validation",
+          "method": "rolling_origin_48h_residuals",
+          "sample_size": 12
+        }
+      }
+    }
+  }
+}
+```
+
+El ejemplo abrevia los arrays para que sea legible; un artefacto válido contiene
+**exactamente 48 elementos** por activo. Sus reglas canónicas son:
+
+- `schema_version` identifica el contrato y `artifact_version` identifica una
+  corrida inmutable. Cumple la expresión
+  `^[0-9]{8}T[0-9]{6}Z-[0-9a-f]{7,40}-(?:gh[0-9]+-[0-9]+|local[0-9a-f]{32})$`:
+  timestamp UTC + revisión del código + `run_id` único. En GitHub Actions el
+  sufijo es `gh<GITHUB_RUN_ID>-<GITHUB_RUN_ATTEMPT>`; en una ejecución local es
+  `local<UUID-sin-guiones>`. Los tests pueden inyectar un `run_id` fijo para
+  conservar determinismo. Dos corridas con el mismo timestamp y revisión no
+  pueden reutilizar `artifact_version`.
+- `assets` contiene obligatoriamente `btc` y `eth`. Se podrán agregar activos
+  sin hacer opcionales esos dos.
+- `forecast` está ordenado y contiene una vez cada entero de `offset_hours` de
+  `1` a `48`. `return_factor` es un número finito y positivo, relativo al último
+  precio observado por entrenamiento: `precio_proyectado = precio_ancla ×
+  return_factor`. No se serializan 48 precios absolutos.
+- `reference` documenta el precio usado para producir el camino, pero Netlify
+  no lo usa como nivel. En cada ingesta, `predict.mjs` ancla el camino al precio
+  vivo del mismo activo y calcula `target_at = anchored_at + offset_hours`.
+  Así, los 48 puntos siempre quedan en el futuro respecto de la lectura actual.
+- `generated_at`, `data_through`, `valid_until`, `expires_at` y
+  `reference.observed_at` son ISO-8601 con offset explícito. La zona semántica
+  es `America/Mexico_City`; timestamps de una fuente externa pueden conservar
+  `Z`. `data_through` no puede ser posterior a `generated_at` ni tener más de
+  12 horas de antigüedad al generar el artefacto. Cada
+  `reference.observed_at` cumple la misma edad máxima de 12 horas, no es futuro,
+  y los timestamps de referencia de BTC y ETH difieren como máximo 1 hora. El
+  artefacto completo es inválido si falla cualquiera de estas condiciones.
+  `valid_until` es `generated_at + 36 h` (un ciclo diario más 12 h de gracia) y
+  `expires_at` es `generated_at + 72 h`; ambas relaciones deben validarse.
+- `horizon_hours` vale `48`, `step_hours` vale `1`, `currency` vale `usd` y
+  `artifact_type` vale `relative_hourly_forecast` en esta versión.
+- `terminal_return` es exactamente el `return_factor` del offset 48 menos 1.
+  `direction` usa el enum `up | down | flat` y el umbral fijo `τ = 0.005`
+  (0.5 %): `up` si el retorno es mayor o igual a `+τ`, `down` si es menor o
+  igual a `-τ`, y `flat` en el intervalo abierto entre ambos límites.
+
+**Ventana de entrenamiento y huecos.** Para cada activo, `train.py` normaliza
+las observaciones a buckets UTC de una hora, descarta precios/timestamps
+inválidos, conserva la observación válida más reciente de cada bucket y ordena
+ascendentemente. No interpola ni rellena horas ausentes. Desde el punto más
+reciente recorre hacia atrás y usa únicamente el sufijo de buckets horarios
+contiguos hasta el primer hueco; datos anteriores al hueco no participan ni en
+entrenamiento ni en validación.
+
+Cada activo necesita al menos **168 puntos horarios contiguos** (7 días) para
+entrenar. Como BTC y ETH son obligatorios, si cualquiera de los dos no alcanza
+168 puntos, la corrida falla y no publica artefacto. Los folds rolling-origin
+se construyen solo dentro del sufijo contiguo del activo y nunca cruzan un
+hueco. Con entrenamiento mínimo de 168 puntos y horizonte de 48 h, hacen falta
+**235 puntos contiguos** para obtener 20 residuales fuera de muestra
+(`168 + 48 + 19`): entre 168 y 234 puntos se permite publicar el forecast, pero
+su confianza debe quedar `insufficient_validation` y `value: null`.
+
+**Confianza, no accuracy.** `confidence.value` estima cuánta evidencia respalda
+la dirección de **este** forecast; no representa el porcentaje histórico de
+aciertos. Se calcula exclusivamente con validación rolling-origin fuera de
+muestra a 48 h. Para cada residual válido `eᵢ = retorno_realᵢ −
+retorno_predichoᵢ`, se forma el escenario `rᵢ* = terminal_return + eᵢ`, se
+clasifica con el mismo umbral `τ`, y la confianza es
+`100 × escenarios_con_la_dirección_emitida / n`, redondeada a un decimal. Con
+al menos 20 residuales, `status` vale `available` y `value` está entre 0 y 100;
+con menos de 20, `status` vale `insufficient_validation` y `value` es `null`.
+No se rellena con accuracy, un valor esperado, residuales de entrenamiento ni
+un mínimo artificial. La accuracy solo podrá calcularse con predicciones
+resueltas del registro descrito en §2.4.
+
+**Validación, publicación y fallback.** `train.py` valida antes de publicar:
+versión de schema soportada, BTC + ETH presentes, 48 offsets completos y
+ordenados, factores/precios finitos y positivos, coherencia de timestamps,
+frescura/sincronía de las referencias, sufijo mínimo de 168 horas,
+`artifact_version` coherente con `producer.run_id`, terminal/dirección
+reproducibles y confianza coherente con su `status`. `NaN`, `Infinity`, arrays
+parciales y campos desconocidos que cambien la semántica invalidan la corrida.
+
+`train.yml` corre a diario, genera y valida localmente el JSON, escribe primero
+`forecast/versions/<artifact_version>.json`, conserva el último documento
+válido como `forecast/previous.json` y solo entonces promueve los mismos bytes a
+`forecast/latest.json`. Usa `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID` como
+secrets de GitHub Actions, y deriva el `run_id` de `GITHUB_RUN_ID` más
+`GITHUB_RUN_ATTEMPT`; las ejecuciones locales generan un UUID. **No crea
+commits, no hace push y no dispara un deploy**; el estado diario queda
+únicamente en Blobs.
+
+`predict.mjs` vuelve a validar el artefacto al leerlo. Prefiere `latest`; si
+falta, está corrupto o usa un schema no soportado, intenta `previous`. Un
+artefacto es `fresh` hasta `valid_until`, es `stale` después de ese instante y
+puede usarse con aviso hasta `expires_at`; pasada esa fecha se considera
+`unavailable`.
+
+**Bloque público `forecast` del snapshot.** El snapshot conserva
+`schema_version: "1.0"`: `forecast` es una adición compatible al contrato base
+de §2.1. Está siempre presente en todo snapshot nuevo. Los seeds legacy pueden
+omitirlo; cualquier consumidor debe interpretar esa ausencia exactamente como
+`{ "status": "unavailable" }`.
+
+Si no existe un artefacto completo y utilizable, la forma mínima es:
+
+```json
+{
+  "forecast": {
+    "status": "unavailable"
+  }
+}
+```
+
+Un estado `unavailable` no contiene `assets`, puntos, dirección, confianza ni
+valores sustitutos. Nunca se inventa una línea plana, ceros, confidence o
+accuracy. Si el artefacto está disponible, la forma exacta es:
+
+```json
+{
+  "forecast": {
+    "status": "fresh",
+    "artifact_version": "20260717T070000Z-a1b2c3d-gh987654321-1",
+    "anchored_at": "2026-07-17T02:15:00-06:00",
+    "valid_until": "2026-07-18T13:00:00-06:00",
+    "expires_at": "2026-07-20T01:00:00-06:00",
+    "assets": {
+      "btc": {
+        "direction": "up",
+        "terminal_return": 0.018,
+        "confidence": {
+          "value": 72.5,
+          "status": "available",
+          "method": "rolling_origin_48h_residuals",
+          "sample_size": 40
+        },
+        "points": [
+          {
+            "offset_hours": 1,
+            "target_at": "2026-07-17T03:15:00-06:00",
+            "price": 65100.25
+          }
+        ]
+      },
+      "eth": {
+        "direction": "down",
+        "terminal_return": -0.007,
+        "confidence": {
+          "value": null,
+          "status": "insufficient_validation",
+          "method": "rolling_origin_48h_residuals",
+          "sample_size": 12
+        },
+        "points": [
+          {
+            "offset_hours": 1,
+            "target_at": "2026-07-17T03:15:00-06:00",
+            "price": 3498.1
+          }
+        ]
+      }
+    }
+  }
+}
+```
+
+El ejemplo abrevia `points`; tanto `btc` como `eth` contienen exactamente 48
+elementos, ordenados y con `offset_hours` de 1 a 48 sin huecos. Para cada punto,
+`target_at = anchored_at + offset_hours` y
+`price = assets[asset].price vivo × return_factor` del mismo offset. `price` es
+finito y positivo. `anchored_at`, `target_at`, `valid_until` y `expires_at` son
+ISO-8601 con offset vigente de CDMX. `direction`, `terminal_return` y el objeto
+`confidence` se copian exactamente del artefacto validado; Netlify no los
+recalcula. El snapshot público no expone `reference` ni `return_factor`.
+
+El enum de `forecast.status` disponible es `fresh | stale` y depende solo de
+`valid_until`/`expires_at` del artefacto. Es independiente del booleano
+top-level `stale`, que describe la ingesta de mercado. Solo se genera un nuevo
+anclaje después de una ingesta fresca y completa de CoinGecko para BTC y ETH;
+en ese caso `anchored_at` coincide con el nuevo `generated_at` del snapshot y
+el precio base de cada camino coincide con el `assets[asset].price` servido.
+
+Si CoinGecko falla, se conservan los precios, `generated_at`, `anchored_at` y
+los 48 puntos del último snapshot válido y solo se marca el `stale` de mercado:
+no se reancla al reloj, a precios parciales ni a un artefacto recién publicado.
+El bloque conservado solo puede cambiar de `fresh` a `stale` por tiempo sin
+modificar el anclaje ni los precios proyectados, y pasa a `unavailable` al
+superar su `expires_at`. Tras la siguiente ingesta fresca, la selección para un
+nuevo anclaje vuelve a ser `latest` y después `previous`; si ambos están
+corruptos, no soportados o expirados, `forecast` queda
+`{ "status": "unavailable" }` sin crear puntos nuevos.
+
+#### 2.4 Registro de predicciones de fases posteriores
+
+**`data/predictions_log.json`** será append-only, con rotación mensual:
 
 ```json
 [{ "made_at": "...", "asset": "btc", "horizon_h": 24, "predicted": 65100,
@@ -168,7 +440,7 @@ crypto-signal-vault/
 │   ├── evaluate.py               # resolución de predicciones + drift
 │   ├── features.py
 │   └── requirements.txt
-├── models/                       # seed del artefacto; el vigente vive en Blobs
+├── models/                       # fixtures de contrato; el vigente vive en Blobs
 ├── metrics/                      # seed de métricas; las vigentes en Blobs
 ├── data/                         # seeds/fixtures de latest.json e history/
 ├── .github/workflows/
@@ -196,7 +468,8 @@ El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y co
 
 - Idioma de código y commits: **inglés**. Idioma de UI y docs: **español**.
 - Ramas: `main` (producción, auto-deploy Netlify), `dev` (integración), `feature/*`.
-- Artefactos versionados en `models/` como `model_YYYYMMDD.json` + `metrics_YYYYMMDD.json`.
+- Artefacto vigente de forecast en `model-artifacts/forecast/latest.json`
+  (Netlify Blobs); las versiones diarias y métricas vivas no se commitean.
 - Ningún secreto en el repo: `GROQ_API_KEY` y `COINGECKO_DEMO_API_KEY` viven en variables de entorno de Netlify.
 - Todo número mostrado al usuario se redondea; toda fecha en zona horaria de **CDMX**.
 
@@ -204,7 +477,7 @@ El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y co
 
 | Hora (UTC) | Proceso | Dónde |
 |---|---|---|
-| 07:00 diario | Entrenamiento + artefacto + métricas → **a Blobs, no al repo** | GitHub Actions |
+| 07:00 diario | Entrenamiento + `model-artifacts/forecast/latest.json` + métricas → **a Blobs, no al repo** | GitHub Actions |
 | 07:30 diario | Evaluación de aciertos + drift | GitHub Actions |
 | cada 15 min | Ingesta/anclaje + refresh de `market-data/latest.json` | Netlify Scheduled Fn |
 | cada 6 h | Refresh de `market-data/history/<asset>.json` (ventana de 30 días) | Netlify Scheduled Fn |
