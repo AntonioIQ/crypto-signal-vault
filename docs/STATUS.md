@@ -56,8 +56,20 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 **Implicación pendiente para Fase 2**: el diseño original decía commitear `models/model_YYYYMMDD.json` a diario. Eso tampoco cabe en el presupuesto. `train.yml` deberá escribir el artefacto a Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` sin tocar el repo.
 
+## Reparto de la Fase 2 (decidido por Antonio, 2026-07-16)
+
+- **Construye: Codex** (sesión con `AGENTS.md` y `.codex/agents/`).
+- **Revisa: Claude** al final de la fase, antes de darla por cerrada — el checklist de `04_QA.md` no se ejecuta a sí mismo dos veces: quien construye no es quien cierra.
+- **Coordinación**: una sola herramienta a la vez sobre el working tree. Durante la Fase 2, Claude no toca el repo salvo para la revisión (en esta fase ya hubo un fix absorbido por un `git add -A` ajeno; ver bitácora).
+
 ## Siguiente paso (uno solo)
 
 ➡️ **Arrancar la FASE 2 — Modelo · «la línea punteada»** (`05_PLAN_EJECUCION.md`): `ml/features.py`, `ml/train.py`, `train.yml` diario, artefacto de forecast 48h pre-computado, anclaje en `predict.mjs`, indicador de dirección + confianza en UI.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
+
+**Prerequisito de Antonio (bloqueante para `train.yml`)**: crear los dos secrets en GitHub → repo Settings → Secrets and variables → Actions:
+1. `NETLIFY_AUTH_TOKEN` — se genera en Netlify: User settings → Applications → Personal access tokens.
+2. `NETLIFY_SITE_ID` — ya conocido: `3cf1b734-b2b4-4b52-b8a2-a215aae09153` (el "Project ID" de likelycoin).
+
+**Recordatorios de presupuesto para quien construya** (`06_PRESUPUESTO.md`): iterar en `feature/*` o `dev` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), y los pushes solo-docs no construyen. Plan B del modelo si Prophet da guerra >1 sesión: statsmodels o GBM ligero (R-07) — el contrato del artefacto es agnóstico.
