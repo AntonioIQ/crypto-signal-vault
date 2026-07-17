@@ -20,6 +20,12 @@
 
 **Verificado local:** con snapshot de hace 49 min → «En cualquier momento»; con snapshot recién generado (17:54) → «18:09 (CDMX)». 28 pruebas verdes.
 
+**Verificado en producción (18:22):**
+- **Cadencia de 15 min confirmada**: corridas a las 18:08:55 y 18:18:55 — los slots de `*/15` con deriva variable (8:55 y 3:55 de retraso). **Netlify sí honra cadencias sub-horarias en el plan Free**; no se dio por bueno el copy «Cada 15 minutos» hasta observarlo, porque de no cumplirse habría sido la misma sobrepromesa que se estaba corrigiendo.
+- **Tarea 1.5 cerrada**: 4 corridas automáticas observadas (16:09, 17:05, 18:08:55, 18:18:55), ninguna coincidente con un deploy.
+- **`refresh-history` estrenada**: primera corrida automática a las 18:04:49 (slot de 00:00 UTC), 721 puntos con el último de las 18:04 de hoy. El histórico congelado quedó resuelto de punta a punta: la gráfica se sirve de `/api/history` con datos de hace minutos, no del bootstrap del 15 de julio.
+- Cadena completa: precio USD 63,840 de las 18:18, «−1.4 %» en rojo, «Datos al día», «Próxima lectura 06:33 p.m.» (= 18:18 + 15 min).
+
 ---
 
 ## 2026-07-16 — El presupuesto de Netlify redefine la arquitectura del estado

@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 18:00 (hora CDMX)
+**Última actualización**: 2026-07-16 18:25 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
@@ -16,12 +16,12 @@
 | 1.2 | Conectar repo a Netlify, verificar deploy del esqueleto | ☑ Hecha (`likelycoin.netlify.app`, `main`) |
 | 1.3 | Key demo de CoinGecko → env vars de Netlify | ☑ Hecha (`COINGECKO_DEMO_API_KEY`) |
 | 1.4 | `predict.mjs` v0: precio actual → snapshot con `stale` | ☑ Hecha y verificada en Netlify |
-| 1.5 | Schedule + verificar 3 corridas | ◐ En curso. Cadencia subida a **cada 15 min** (`*/15 * * * *`). Corridas automáticas confirmadas a las 16:09 y 17:05 CDMX (no coinciden con ningún deploy, así que son del cron). Falta 1 observación más. |
+| 1.5 | Schedule + verificar 3 corridas | ☑ Hecha. Cadencia **cada 15 min** (`*/15 * * * *`) confirmada en producción con 4 corridas automáticas observadas: 16:09, 17:05, 18:08:55 y 18:18:55 CDMX. Ninguna coincide con un deploy. |
 | 1.6 | Bootstrap histórico 30 días → `data/history/` | ☑ Hecha (seed de ~720 puntos/activo; el vigente se refresca a Blobs cada 6h) |
 | 1.7 | `index.html` + `app.js`: precio, gráfica, estados, responsive | ☑ Hecha (rediseño profesional LikelyCoin verificado en 390px y desktop) |
 | 1.8 | Footer disclaimer + timestamp CDMX | ☑ Hecha |
 | 1.9 | `ci.yml` con validación de schema de `latest.json` | ☑ Hecha (28 tests verdes) |
-| 1.10 | Checklist de QA y cierre de fase | ☐ Pendiente (requiere sitio vivo) |
+| 1.10 | Checklist de QA y cierre de fase | ☐ Pendiente — **es lo único que falta de la Fase 1** |
 
 ## Arquitectura del refresh (decisión cerrada)
 
@@ -42,7 +42,9 @@ Los seeds del repo los copia el build a `public/data/`; el frontend pide el endp
 - Rediseño LikelyCoin desplegado en producción (`3d42b6b`): esfera y emojis decorativos eliminados, identidad geométrica de señal, jerarquía editorial y atribución de CoinGecko.
 - UI productiva verificada: marca LikelyCoin, «Datos al día», precio real, sin errores de consola ni desbordamiento horizontal. QA responsive previo en 1440px/390px.
 - Snapshot fresco observado a las 16:09 CDMX después del redeploy (`stale: false`).
-- **Evidencia de 1.5**: corridas automáticas a las **16:09** y **17:05** CDMX. Ninguna coincide con un deploy (13:25, 14:23, 16:26, 16:52, 17:14), así que son del cron y no del redeploy. Falta 1 observación más.
+- **1.5 cerrada**: corridas automáticas a las 16:09, 17:05, **18:08:55 y 18:18:55** CDMX. Ninguna coincide con un deploy (13:25, 14:23, 16:26, 16:52, 17:14, 17:57), así que son del cron. Netlify **sí honra cadencias sub-horarias** en el plan Free.
+- **`refresh-history` verificada**: primera corrida automática a las **18:04:49** CDMX (slot de 00:00 UTC). Escribió 721 puntos con el último de las 18:04 de hoy → el histórico ya no depende del bootstrap.
+- **Cadena completa verificada en producción a las 18:22**: precio USD 63,840 de las 18:18, «−1.4 %» en rojo, «Datos al día», «Próxima lectura 06:33 p.m.» (= 18:18 + 15 min), y la gráfica sirviéndose de `/api/history` con 721 puntos frescos.
 - **El scheduler de Netlify llega tarde y a minutos variables** (:09, :05). Por eso «Próxima lectura» ya no se ancla a la frontera de reloj sino a `generated_at + 15 min`, y dice «En cualquier momento» si esa estimación pasa.
 - **Bug corregido en producción**: `change24h()` calculaba el % entre los dos últimos puntos del histórico (congelados) mientras el precio venía vivo del API → mostraba BTC en ▲ 0.0 % verde cuando realmente caía −1.16 %. Ahora ancla el % al precio mostrado y lo oculta si el histórico no cubre esa ventana ±2h. El arreglo quedó absorbido dentro del commit `3d42b6b` del rediseño.
 
