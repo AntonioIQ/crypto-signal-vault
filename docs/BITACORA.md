@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-19 — Secrets listos, PR verde y Lighthouse aprobado
+
+**Desbloqueo externo:** Antonio creó `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID` como repository secrets de GitHub Actions. Se verificaron únicamente sus nombres; los valores nunca salieron del almacén de GitHub.
+
+**Validación remota sin tocar producción:**
+- PR en borrador #1 creada desde `feature/phase-2-model` hacia `main`.
+- GitHub Actions CI verde y Netlify Deploy Preview listo en `https://deploy-preview-1--likelycoin.netlify.app`.
+- El primer Lighthouse móvil marcó 76 performance: Chart.js bloqueaba el pintado inicial y faltaba favicon.
+- Corrección: Chart.js ahora carga en segundo plano y el precio/señal sobreviven si falla el CDN; se agregó favicon SVG propio y prueba de que el HTML inicial no vuelve a bloquearse con Chart.js.
+- Resultado posterior: **Lighthouse desktop 99 performance / 100 accesibilidad / CLS 0 / TBT 0 ms**. Móvil quedó en 81 / 100, sin errores de consola; se documenta como riesgo de mejora. SEO 60 del preview se explica por el `noindex` que Netlify inyecta en esa superficie, mientras producción ya había medido SEO 100.
+- Suite ampliada a **68 Node + 26 Python**; CI volvió a pasar después de la corrección.
+
+**Producción sigue intacta:** no hubo merge ni production deploy. El próximo paso obligatorio es la revisión externa de Claude acordada para Fase 2. Si aprueba, se hará un solo merge y después la primera ejecución controlada de `Daily forecast training` contra Netlify Blobs.
+
+---
+
 ## 2026-07-17 — Fase 2 visible: anclaje aprobado y línea punteada terminada
 
 **Runtime 2.4 cerrado por QA:**
