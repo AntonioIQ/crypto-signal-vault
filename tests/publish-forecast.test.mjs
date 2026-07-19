@@ -271,7 +271,7 @@ test('validator rejects unknown fields at every canonical object layer', () => {
     mutate(artifact);
     assert.throws(
       () => validateForecastPayload(JSON.stringify(artifact)),
-      /unsupported fields/,
+      /fields are invalid/,
     );
   }
 });
@@ -288,7 +288,7 @@ test('validator enforces canonical BTC and ETH identities', () => {
     artifact.assets[asset][field] = value;
     assert.throws(
       () => validateForecastPayload(JSON.stringify(artifact)),
-      /identity is not canonical/,
+      /identity is invalid/,
     );
   }
 });
@@ -299,14 +299,26 @@ test('validator rejects hidden accuracy and confidence beyond one decimal', () =
   withAccuracy.assets.btc.summary.confidence.accuracy = 99;
   assert.throws(
     () => validateForecastPayload(JSON.stringify(withAccuracy)),
-    /unsupported fields: accuracy/,
+    /fields are invalid/,
   );
 
   const overPrecise = JSON.parse(artifactPayload());
   overPrecise.assets.btc.summary.confidence.value = 72.55;
   assert.throws(
     () => validateForecastPayload(JSON.stringify(overPrecise)),
-    /inconsistent with its sample size/,
+    /status is inconsistent/,
+  );
+});
+
+
+test('publisher applies the runtime timestamp contract', () => {
+  const artifact = JSON.parse(artifactPayload());
+  artifact.generated_at = 'not-an-iso-timestamp';
+
+  assert.throws(
+    () => validateForecastPayload(JSON.stringify(artifact)),
+    (error) => error instanceof ForecastPublicationError
+      && /ISO-8601 timestamp/.test(error.message),
   );
 });
 

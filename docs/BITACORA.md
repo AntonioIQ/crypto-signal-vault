@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-19 — Claude aprueba Fase 2; checkpoint de observaciones menores
+
+**Revisión externa recibida:** Claude revisó la PR #1 en `8f388fd` y concluyó **«APROBACIÓN EXTERNA FASE 2: APTA PARA MERGE»**, sin bloqueantes ni hallazgos mayores. Reportó cinco observaciones menores.
+
+**Cuatro observaciones corregidas en el checkpoint local:**
+- El publicador ya importa el validador estricto del runtime; se eliminó la implementación duplicada y se agregó una prueba de que aplica el mismo contrato temporal.
+- Una falla al leer o anclar el pronóstico ahora emite un warning controlado sin exponer el error ni secretos, manteniendo disponible el precio fresco.
+- La CI de PR ahora ejecuta también las 26 pruebas Python en Python 3.12.
+- Se retiró `requests` de `ml/requirements.txt` porque no se usa.
+
+**Verificación:** 69 pruebas Node + 26 Python, build y sintaxis verdes. No se hizo merge ni deploy de producción.
+
+**Pendiente para retomar:** resolver M1 instalando `chart.js@4.4.9` para servirlo desde el propio build y repetir Lighthouse móvil. El primer intento de descarga quedó bloqueado por DNS del sandbox; se retiró el cambio incompleto antes de pausar, por lo que el repo conserva un build funcional. Luego corresponde subir el delta, pedir a Claude una confirmación breve sobre los cambios y hacer el único merge productivo.
+
+---
+
 ## 2026-07-19 — Secrets listos, PR verde y Lighthouse aprobado
 
 **Desbloqueo externo:** Antonio creó `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID` como repository secrets de GitHub Actions. Se verificaron únicamente sus nombres; los valores nunca salieron del almacén de GitHub.

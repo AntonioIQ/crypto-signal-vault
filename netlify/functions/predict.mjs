@@ -31,6 +31,7 @@ export async function runPrediction({
   fetchPrices = fetchCurrentPrices,
   clock = () => new Date(),
   seedFactory = createSeedSnapshot,
+  logger = console,
 } = {}) {
   const store = getStoreFn(MARKET_DATA_STORE);
   let previousSnapshot = null;
@@ -62,7 +63,9 @@ export async function runPrediction({
         snapshot = createFreshSnapshot(prices, anchoredAt, forecast);
       }
     } catch {
-      // Forecast storage and validation are isolated from live market ingestion.
+      logger.warn(
+        "Forecast anchoring skipped; fresh market data remains available.",
+      );
     }
 
     status = "fresh";

@@ -334,6 +334,7 @@ test("fresh ingestion anchors exactly 48 future points to live prices", async ()
 test("model store outage never breaks fresh market prices", async () => {
   const marketStore = makeMarketStore();
   const storesRequested = [];
+  const warnings = [];
 
   const { status, snapshot } = await runPrediction({
     getStoreFn: (name) => {
@@ -343,6 +344,7 @@ test("model store outage never breaks fresh market prices", async () => {
     },
     fetchPrices: async () => SAMPLE_PRICES,
     clock: () => new Date("2026-07-17T02:15:00-06:00"),
+    logger: { warn: (message) => warnings.push(message) },
   });
 
   assert.equal(status, "fresh");
@@ -350,6 +352,9 @@ test("model store outage never breaks fresh market prices", async () => {
   assert.equal(snapshot.assets.btc.price, SAMPLE_PRICES.btc.price);
   assert.deepEqual(snapshot.forecast, { status: "unavailable" });
   assert.deepEqual(storesRequested, [MARKET_DATA_STORE, MODEL_ARTIFACTS_STORE]);
+  assert.deepEqual(warnings, [
+    "Forecast anchoring skipped; fresh market data remains available.",
+  ]);
 });
 
 test("CoinGecko failure preserves anchor and points while forecast ages", async () => {
