@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 import {
@@ -144,4 +145,11 @@ test("artifact version exposes its UTC generation timestamp", () => {
     "2026-07-17T07:00:00.000Z",
   );
   assert.equal(artifactGeneratedAt("not-a-version"), null);
+});
+
+test("initial HTML does not parser-block on Chart.js and declares a favicon", async () => {
+  const html = await readFile("public/index.html", "utf8");
+
+  assert.doesNotMatch(html, /<script[^>]+chart\.js/i);
+  assert.match(html, /<link rel="icon" href="favicon\.svg"/);
 });

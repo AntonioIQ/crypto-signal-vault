@@ -10,6 +10,7 @@ import {
 } from './forecast-ui.js';
 
 const TIMEZONE = 'America/Mexico_City';
+const CHART_JS_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
 const STALE_AFTER_MS = 60 * 60 * 1000; // 4 missed runs: no longer "al día"
 const ANCHOR_TOLERANCE_MS = 2 * 60 * 60 * 1000; // max drift for the 24h anchor
@@ -42,6 +43,26 @@ const state = {
   history: {}, // asset -> history document
   chart: null,
 };
+
+let chartLibraryPromise = null;
+
+function loadChartLibrary() {
+  if (globalThis.Chart) return Promise.resolve(globalThis.Chart);
+  if (chartLibraryPromise) return chartLibraryPromise;
+
+  chartLibraryPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = CHART_JS_URL;
+    script.async = true;
+    script.onload = () => {
+      if (globalThis.Chart) resolve(globalThis.Chart);
+      else reject(new Error('Chart.js loaded without exposing Chart.'));
+    };
+    script.onerror = () => reject(new Error('Chart.js could not be loaded.'));
+    document.head.append(script);
+  });
+  return chartLibraryPromise;
+}
 
 const priceFmt = new Intl.NumberFormat('es-MX', {
   style: 'currency',
@@ -169,7 +190,7 @@ function renderPrice() {
 
 function renderChart() {
   const history = state.history[state.asset];
-  if (!history?.points?.length) return;
+  if (!history?.points?.length || !globalThis.Chart) return;
 
   const series = chartSeries(history, state.snapshot, state.asset);
   const assetName = state.snapshot?.assets?.[state.asset]?.name ?? state.asset.toUpperCase();
@@ -222,7 +243,7 @@ function renderChart() {
       : `Precio real de los últimos 30 días de ${assetName}`,
   );
 
-  state.chart = new Chart(canvas, {
+  state.chart = new globalThis.Chart(canvas, {
     type: 'line',
     data: {
       labels: series.labels,
@@ -336,6 +357,8 @@ function selectAsset(asset) {
 }
 
 async function init() {
+  const chartReady = loadChartLibrary().catch(() => null);
+
   for (const tab of els.tabs) {
     tab.addEventListener('click', () => selectAsset(tab.dataset.asset));
   }
@@ -350,6 +373,19 @@ async function init() {
     state.history = { btc, eth };
     renderStatus(snapshot);
     selectAsset(state.asset);
+
+    const chartConstructor = await chartReady;
+    if (chartConstructor) {
+      try {
+        renderChart();
+      } catch {
+        els.chartNote.textContent =
+          'Los precios están disponibles, pero la gráfica no pudo cargarse en este momento.';
+      }
+    } else {
+      els.chartNote.textContent =
+        'Los precios están disponibles, pero la gráfica no pudo cargarse en este momento.';
+    }
   } catch (error) {
     console.error(error);
     setStatus('error', 'No se pudieron cargar los datos. Intenta de nuevo en unos minutos.');
