@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-16 19:31 (hora CDMX)
+**Última actualización**: 2026-07-17 21:38 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
@@ -15,9 +15,18 @@
 | 2.1 | Contrato `forecast-artifact/1.0` + snapshot anclado | ☑ Documentado antes del código |
 | 2.2 | `ml/features.py` + `ml/train.py` + Prophet + validación rolling-origin | ☑ Implementado y aprobado por QA; Prophet real verificado |
 | 2.3 | `train.yml` diario + publicador seguro a Netlify Blobs | ☑ Implementado y aprobado por QA; falta prueba real con secrets |
-| 2.4 | Lectura `latest → previous`, anclaje 48h en `predict.mjs` | ◐ Implementado; 57 Node + 26 Python verdes, pendiente repase formal de QA |
-| 2.5 | Línea punteada + dirección + confianza en UI | ☐ Pendiente |
-| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ☐ Pendiente |
+| 2.4 | Lectura `latest → previous`, anclaje 48h en `predict.mjs` | ☑ Implementado y aprobado por QA; incluye fallback ante JSON malformado y seed explícito `unavailable` |
+| 2.5 | Línea punteada + dirección + confianza en UI | ☑ Implementado y aprobado por QA; desktop/390 px verificados |
+| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ◐ Pendientes integración real con secrets, Lighthouse del branch deploy y revisión de Claude |
+
+### Validación local de Fase 2
+
+- **67 pruebas Node + 26 Python verdes**; build, sintaxis y `git diff --check` correctos.
+- QA-Guardian aprobó 2.4 después de corregir el fallback de `latest` con JSON malformado y la forma de snapshots seed nuevos.
+- QA-Guardian aprobó 2.5 sin hallazgos: 48 puntos punteados, BTC/ETH, dirección simple, confianza separada de accuracy y estados `fresh/stale/unavailable`.
+- Revisión visual local con snapshot de pronóstico controlado: desktop y 390 px sin overflow, cambio BTC/ETH correcto y sin errores de consola.
+- Se eliminó el último motivo circular del panel predictivo; la señal usa una identidad lineal sobria, sin esfera ni emojis.
+- El estado sin forecast conserva precio/gráfica real y dice explícitamente «Sin señal disponible» / «Sin medición».
 
 ### FASE 1 — Fundación · «la página viva» — CERRADA
 
@@ -75,11 +84,11 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Reanudar en `feature/phase-2-model`: pasar el anclaje runtime por QA-Guardian y después implementar la línea punteada + indicador en UI.
+➡️ Antonio crea `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID` en GitHub Actions. Después: branch deploy + Lighthouse, revisión externa de Claude y un solo merge batched a `main`.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 
-**Prerequisito de Antonio (bloqueante para `train.yml`)**: crear los dos secrets en GitHub → repo Settings → Secrets and variables → Actions:
+**Prerequisito de Antonio (bloqueante para `train.yml`, confirmado ausente el 17 jul)**: crear los dos secrets en GitHub → repo Settings → Secrets and variables → Actions:
 1. `NETLIFY_AUTH_TOKEN` — se genera en Netlify: User settings → Applications → Personal access tokens.
 2. `NETLIFY_SITE_ID` — ya conocido: `3cf1b734-b2b4-4b52-b8a2-a215aae09153` (el "Project ID" de likelycoin).
 

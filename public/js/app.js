@@ -1,7 +1,13 @@
-// LikelyCoin — dashboard (Front-UX, tasks 1.7 / 1.8)
+// LikelyCoin — market and 48-hour forecast dashboard
 // Data flow: /api/latest (Blobs-backed function) with fallback to the static
 // seed /data/latest.json; 30-day history from /api/history with the static
 // /data/history/<asset>.json build seed as fallback.
+
+import {
+  artifactGeneratedAt,
+  chartSeries,
+  forecastView,
+} from './forecast-ui.js';
 
 const TIMEZONE = 'America/Mexico_City';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
@@ -17,6 +23,16 @@ const els = {
   change: document.getElementById('change'),
   lastUpdate: document.getElementById('last-update'),
   nextUpdate: document.getElementById('card-next-update'),
+  chartNote: document.getElementById('chart-note'),
+  forecastLegend: document.getElementById('forecast-legend'),
+  predictionTitle: document.getElementById('prediction-title'),
+  predictionBody: document.getElementById('prediction-body'),
+  signalPanel: document.getElementById('signal-panel'),
+  signalDirection: document.getElementById('signal-direction'),
+  signalConfidence: document.getElementById('signal-confidence'),
+  signalStatus: document.getElementById('signal-status'),
+  trained: document.getElementById('card-trained'),
+  trainedStatus: document.getElementById('card-trained-status'),
   tabs: [...document.querySelectorAll('.tab')],
 };
 
@@ -155,8 +171,8 @@ function renderChart() {
   const history = state.history[state.asset];
   if (!history?.points?.length) return;
 
-  const labels = history.points.map((p) => p.timestamp);
-  const data = history.points.map((p) => p.price);
+  const series = chartSeries(history, state.snapshot, state.asset);
+  const assetName = state.snapshot?.assets?.[state.asset]?.name ?? state.asset.toUpperCase();
 
   if (state.chart) state.chart.destroy();
   const styles = getComputedStyle(document.documentElement);
@@ -165,22 +181,52 @@ function renderChart() {
   const grid = styles.getPropertyValue('--chart-grid').trim();
   const surface = styles.getPropertyValue('--surface-raised').trim();
   const text = styles.getPropertyValue('--text').trim();
+  const forecastColor = styles.getPropertyValue('--forecast').trim();
 
-  state.chart = new Chart(document.getElementById('chart'), {
+  const datasets = [{
+    label: 'Precio real',
+    data: series.actual,
+    borderColor: accent,
+    backgroundColor: 'rgba(105, 230, 178, 0.06)',
+    borderWidth: 2.5,
+    fill: true,
+    pointRadius: 0,
+    tension: 0.2,
+    spanGaps: true, // tolerate ingestion gaps (R-11)
+  }];
+  if (series.forecast) {
+    datasets.push({
+      label: 'Pronóstico 48 h',
+      data: series.forecast,
+      borderColor: forecastColor,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      borderDash: [6, 6],
+      fill: false,
+      pointRadius: 0,
+      pointHitRadius: 8,
+      tension: 0.24,
+      spanGaps: false,
+    });
+  }
+
+  els.forecastLegend.hidden = !series.forecast;
+  els.chartNote.textContent = series.forecast
+    ? `La línea punteada muestra el recorrido estimado para ${assetName}; no representa una garantía.`
+    : 'El precio real sigue disponible. Publicaremos la línea punteada cuando exista un pronóstico válido.';
+  const canvas = document.getElementById('chart');
+  canvas.setAttribute(
+    'aria-label',
+    series.forecast
+      ? `Precio real y pronóstico de 48 horas de ${assetName}`
+      : `Precio real de los últimos 30 días de ${assetName}`,
+  );
+
+  state.chart = new Chart(canvas, {
     type: 'line',
     data: {
-      labels,
-      datasets: [{
-        label: 'Precio real',
-        data,
-        borderColor: accent,
-        backgroundColor: 'rgba(105, 230, 178, 0.06)',
-        borderWidth: 2.5,
-        fill: true,
-        pointRadius: 0,
-        tension: 0.2,
-        spanGaps: true, // tolerate ingestion gaps (R-11)
-      }],
+      labels: series.labels,
+      datasets,
     },
     options: {
       responsive: true,
@@ -199,7 +245,7 @@ function renderChart() {
           displayColors: false,
           callbacks: {
             title: (items) => `${timeFmt.format(new Date(items[0].label))} (CDMX)`,
-            label: (item) => priceFmt.format(item.parsed.y),
+            label: (item) => `${item.dataset.label}: ${priceFmt.format(item.parsed.y)}`,
           },
         },
       },
@@ -231,6 +277,52 @@ function renderChart() {
   });
 }
 
+function renderPrediction() {
+  const view = forecastView(state.snapshot, state.asset);
+  const assetName = state.snapshot?.assets?.[state.asset]?.name ?? state.asset.toUpperCase();
+  els.signalPanel.classList.remove('up', 'down', 'flat', 'stale', 'unavailable');
+
+  if (!view.available) {
+    els.predictionTitle.textContent = 'El pronóstico todavía no está disponible.';
+    els.predictionBody.textContent =
+      `Seguimos mostrando el precio real de ${assetName}. La señal aparecerá cuando el modelo publique una lectura completa y vigente.`;
+    els.signalDirection.textContent = 'Sin señal disponible';
+    els.signalConfidence.textContent = 'Sin medición';
+    els.signalStatus.textContent = 'NO DISPONIBLE';
+    els.signalPanel.classList.add('unavailable');
+    els.trained.textContent = 'Sin publicación';
+    els.trainedStatus.textContent = 'PRONÓSTICO PENDIENTE';
+    return;
+  }
+
+  const estimatedChange = Math.abs(view.terminalReturn * 100).toFixed(1);
+  const changeCopy = view.direction === 'up'
+    ? `El modelo estima una subida de ${estimatedChange} % al final del periodo.`
+    : view.direction === 'down'
+      ? `El modelo estima una bajada de ${estimatedChange} % al final del periodo.`
+      : 'El cambio estimado se mantiene dentro de un margen de 0.5 %.';
+  const confidenceCopy = view.confidenceAvailable
+    ? 'La confianza resume qué tan consistente fue esta dirección en pruebas previas.'
+    : 'Todavía no hay suficientes pruebas previas para publicar un porcentaje de confianza.';
+  const freshnessCopy = view.status === 'stale'
+    ? ' Esta lectura está pendiente de actualización.'
+    : '';
+
+  els.predictionTitle.textContent = view.headline;
+  els.predictionBody.textContent = `${changeCopy} ${confidenceCopy}${freshnessCopy}`;
+  els.signalDirection.textContent = view.directionLabel;
+  els.signalConfidence.textContent = view.confidenceLabel;
+  els.signalStatus.textContent = view.status === 'fresh' ? 'PRONÓSTICO VIGENTE' : 'ACTUALIZACIÓN PENDIENTE';
+  els.signalPanel.classList.add(view.tone);
+  if (view.status === 'stale') els.signalPanel.classList.add('stale');
+
+  const trainedAt = artifactGeneratedAt(view.artifactVersion);
+  els.trained.textContent = trainedAt
+    ? `${timeFmt.format(trainedAt)} (CDMX)`
+    : 'Publicación validada';
+  els.trainedStatus.textContent = view.status === 'fresh' ? 'MODELO AL DÍA' : 'MODELO POR ACTUALIZAR';
+}
+
 function selectAsset(asset) {
   state.asset = asset;
   for (const tab of els.tabs) {
@@ -239,6 +331,7 @@ function selectAsset(asset) {
     tab.setAttribute('aria-selected', String(active));
   }
   renderPrice();
+  renderPrediction();
   renderChart();
 }
 

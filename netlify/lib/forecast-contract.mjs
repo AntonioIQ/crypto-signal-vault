@@ -353,14 +353,29 @@ export async function readUsableForecastArtifact(store, now = new Date()) {
   if (!store || typeof store.get !== "function") return null;
 
   for (const key of [LATEST_FORECAST_KEY, PREVIOUS_FORECAST_KEY]) {
-    let artifact;
+    let rawArtifact;
     try {
-      artifact = await store.get(key, {
+      rawArtifact = await store.get(key, {
         consistency: "strong",
-        type: "json",
+        type: "text",
       });
     } catch {
+      // A storage outage is different from a corrupt document: if the read
+      // itself is unavailable, a second key in the same store is not a safe
+      // recovery path.
       return null;
+    }
+
+    if (rawArtifact === null || rawArtifact === undefined) continue;
+
+    let artifact;
+    try {
+      artifact = typeof rawArtifact === "string"
+        ? JSON.parse(rawArtifact)
+        : rawArtifact;
+    } catch {
+      // Malformed latest bytes must not prevent recovery from previous.
+      continue;
     }
 
     try {

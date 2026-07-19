@@ -10,6 +10,7 @@
   --muted-strong: #b7c5c0;
   --accent: #69e6b2;
   --accent-bright: #b8ffdf;
+  --forecast: #d6f8e9;
   --accent-ink: #052018;
   --up: #70edb8;
   --down: #ff918c;
@@ -397,9 +398,19 @@ a {
   align-items: center;
 }
 
+.chart-legends,
 .chart-legend {
   display: flex;
   align-items: center;
+}
+
+.chart-legends {
+  gap: 18px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.chart-legend {
   gap: 8px;
   color: var(--muted);
   font-size: 0.72rem;
@@ -410,6 +421,16 @@ a {
   width: 20px;
   height: 2px;
   background: var(--accent);
+}
+
+.forecast-legend span {
+  height: 0;
+  border-top: 2px dashed var(--forecast);
+  background: transparent;
+}
+
+.forecast-legend[hidden] {
+  display: none;
 }
 
 .chart-wrap {
@@ -464,14 +485,42 @@ a {
 .signal-preview::after {
   content: "";
   position: absolute;
-  top: -60px;
-  right: -70px;
-  width: 170px;
-  height: 170px;
-  border: 1px solid rgba(105, 230, 178, 0.12);
-  border-radius: 50%;
-  box-shadow: 0 0 0 28px rgba(105, 230, 178, 0.025), 0 0 0 56px rgba(105, 230, 178, 0.018);
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent 72%);
+  opacity: 0.55;
   pointer-events: none;
+}
+
+.signal-preview.up {
+  border-color: rgba(112, 237, 184, 0.34);
+}
+
+.signal-preview.down {
+  border-color: rgba(255, 145, 140, 0.34);
+}
+
+.signal-preview.flat,
+.signal-preview.unavailable,
+.signal-preview.stale {
+  border-color: var(--border-strong);
+}
+
+.signal-preview.up #signal-direction {
+  color: var(--up);
+}
+
+.signal-preview.down #signal-direction {
+  color: var(--down);
+}
+
+.signal-preview.flat #signal-direction {
+  color: var(--forecast);
+}
+
+.signal-preview.unavailable #signal-direction,
+.signal-preview.unavailable #signal-confidence {
+  color: var(--muted);
 }
 
 .preview-row {
@@ -499,6 +548,24 @@ a {
   position: relative;
   z-index: 1;
   margin-top: 19px;
+}
+
+.signal-preview.down .development-badge {
+  border-color: rgba(255, 145, 140, 0.24);
+  background: rgba(255, 145, 140, 0.07);
+  color: var(--down);
+}
+
+.signal-preview.stale .development-badge {
+  border-color: rgba(241, 197, 106, 0.24);
+  background: rgba(241, 197, 106, 0.06);
+  color: var(--stale);
+}
+
+.signal-preview.unavailable .development-badge {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
 }
 
 .system-section {
@@ -695,6 +762,15 @@ a {
 
   .chart-wrap {
     height: 255px;
+  }
+
+  .panel-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .chart-legends {
+    justify-content: flex-start;
   }
 
   .prediction-card {

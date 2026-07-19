@@ -150,6 +150,7 @@ export function createSeedSnapshot() {
     timezone: TIMEZONE,
     currency: CURRENCY,
     stale: true,
+    forecast: unavailableForecast(),
     assets: Object.fromEntries(
       Object.entries(ASSETS).map(([asset, metadata]) => [
         asset,

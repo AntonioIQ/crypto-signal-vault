@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#07110f">
-  <meta name="description" content="LikelyCoin muestra precios de Bitcoin y Ethereum con contexto simple y una señal predictiva en desarrollo.">
+  <meta name="description" content="LikelyCoin muestra precios de Bitcoin y Ethereum con contexto simple y un pronóstico de 48 horas.">
   <title>LikelyCoin — El mercado, explicado con claridad</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
@@ -87,37 +87,40 @@
               <p class="section-label">COMPORTAMIENTO RECIENTE</p>
               <h2>Últimos 30 días</h2>
             </div>
-            <div class="chart-legend"><span aria-hidden="true"></span> Precio real</div>
+            <div class="chart-legends" aria-label="Leyenda de la gráfica">
+              <div class="chart-legend"><span aria-hidden="true"></span> Precio real</div>
+              <div id="forecast-legend" class="chart-legend forecast-legend" hidden><span aria-hidden="true"></span> Pronóstico 48 h</div>
+            </div>
           </div>
           <div class="chart-wrap">
             <canvas id="chart" aria-label="Gráfica de precio de los últimos 30 días" role="img"></canvas>
           </div>
-          <p class="chart-note">La señal de las próximas 48 horas se añadirá cuando el modelo supere las pruebas de calidad.</p>
+          <p id="chart-note" class="chart-note">Buscando el pronóstico más reciente…</p>
         </article>
       </section>
 
       <section class="prediction-card panel" aria-labelledby="prediction-title">
         <div class="prediction-copy">
-          <p class="section-label">MODELO PREDICTIVO · FASE 2</p>
-          <h2 id="prediction-title">Una lectura simple de las próximas 48 horas.</h2>
-          <p id="prediction-body">El modelo está en construcción. Cuando esté validado, aquí verás si el precio probablemente suba, baje o se mantenga, junto con su nivel de confianza medido.</p>
-          <p class="mini-disclaimer">La señal será informativa y educativa. No será una recomendación para comprar o vender.</p>
+          <p class="section-label">PRONÓSTICO A 48 HORAS</p>
+          <h2 id="prediction-title">Preparando la lectura más reciente.</h2>
+          <p id="prediction-body">Estamos comprobando si hay un pronóstico válido para la moneda seleccionada.</p>
+          <p class="mini-disclaimer">Esta lectura es informativa y educativa. No es una recomendación para comprar o vender.</p>
         </div>
 
-        <div class="signal-preview" aria-label="Vista previa de la señal, todavía sin datos">
+        <div id="signal-panel" class="signal-preview" aria-live="polite">
           <div class="preview-row">
             <span>Dirección probable</span>
-            <strong>—</strong>
+            <strong id="signal-direction">—</strong>
           </div>
           <div class="preview-row">
-            <span>Confianza medida</span>
-            <strong>—</strong>
+            <span>Confianza de esta señal</span>
+            <strong id="signal-confidence">—</strong>
           </div>
           <div class="preview-row">
             <span>Horizonte</span>
             <strong>48 h</strong>
           </div>
-          <span class="development-badge">EN DESARROLLO</span>
+          <span id="signal-status" class="development-badge">CARGANDO</span>
         </div>
       </section>
 
@@ -135,7 +138,7 @@
             <span class="card-index">01</span>
             <h3>Último entrenamiento</h3>
             <p id="card-trained">—</p>
-            <span class="soon">DISPONIBLE EN FASE 2</span>
+            <span id="card-trained-status" class="soon">BUSCANDO PUBLICACIÓN</span>
           </article>
           <article class="mlops-card panel">
             <span class="card-index">02</span>
@@ -164,6 +167,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
-  <script src="js/app.js"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

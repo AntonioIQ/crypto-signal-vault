@@ -1,0 +1,147 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import {
+  artifactGeneratedAt,
+  chartSeries,
+  forecastView,
+} from "../public/js/forecast-ui.js";
+
+function snapshotFixture({
+  status = "fresh",
+  direction = "up",
+  confidence = {
+    value: 72.5,
+    status: "available",
+    method: "rolling_origin_48h_residuals",
+    sample_size: 40,
+  },
+} = {}) {
+  const anchoredAt = "2026-07-17T02:15:00-06:00";
+  const anchorMs = Date.parse(anchoredAt);
+  const makeAsset = (price) => ({
+    direction,
+    terminal_return: direction === "up" ? 0.018 : direction === "down" ? -0.018 : 0.002,
+    confidence,
+    points: Array.from({ length: 48 }, (_, index) => ({
+      offset_hours: index + 1,
+      target_at: new Date(anchorMs + (index + 1) * 3_600_000).toISOString(),
+      price: price * (1 + (index + 1) / 4_800),
+    })),
+  });
+
+  return {
+    schema_version: "1.0",
+    generated_at: anchoredAt,
+    assets: {
+      btc: { name: "Bitcoin", price: 65_000 },
+      eth: { name: "Ethereum", price: 3_500 },
+    },
+    forecast: {
+      status,
+      artifact_version: "20260717T070000Z-a1b2c3d-gh987654321-1",
+      anchored_at: anchoredAt,
+      valid_until: "2026-07-18T13:00:00-06:00",
+      expires_at: "2026-07-20T01:00:00-06:00",
+      assets: {
+        btc: makeAsset(65_000),
+        eth: makeAsset(3_500),
+      },
+    },
+  };
+}
+
+test("legacy snapshots without forecast render an honest unavailable state", () => {
+  const view = forecastView({ assets: { btc: { price: 65_000 } } }, "btc");
+
+  assert.equal(view.available, false);
+  assert.equal(view.confidenceLabel, "Sin medición");
+  assert.equal(view.points.length, 0);
+});
+
+test("fresh forecast exposes simple direction and measured confidence copy", () => {
+  const view = forecastView(snapshotFixture(), "btc");
+
+  assert.equal(view.available, true);
+  assert.equal(view.status, "fresh");
+  assert.equal(view.directionLabel, "Probablemente suba");
+  assert.equal(view.confidenceLabel, "73 %");
+  assert.equal(view.points.length, 48);
+});
+
+test("insufficient validation never becomes a made-up percentage", () => {
+  const snapshot = snapshotFixture({
+    direction: "flat",
+    confidence: {
+      value: null,
+      status: "insufficient_validation",
+      method: "rolling_origin_48h_residuals",
+      sample_size: 12,
+    },
+  });
+  const view = forecastView(snapshot, "eth");
+
+  assert.equal(view.available, true);
+  assert.equal(view.directionLabel, "Probablemente se mantenga");
+  assert.equal(view.confidenceAvailable, false);
+  assert.equal(view.confidenceLabel, "Aún no medible");
+});
+
+test("stale downward forecasts remain visible with an update warning state", () => {
+  const view = forecastView(
+    snapshotFixture({ status: "stale", direction: "down" }),
+    "btc",
+  );
+
+  assert.equal(view.available, true);
+  assert.equal(view.status, "stale");
+  assert.equal(view.directionLabel, "Probablemente baje");
+  assert.equal(view.tone, "down");
+});
+
+test("partial forecasts degrade to unavailable instead of drawing a line", () => {
+  const snapshot = snapshotFixture();
+  snapshot.forecast.assets.btc.points.pop();
+
+  assert.equal(forecastView(snapshot, "btc").available, false);
+});
+
+test("chart joins the live anchor to exactly 48 projected points", () => {
+  const snapshot = snapshotFixture();
+  const history = {
+    points: [
+      { timestamp: "2026-07-17T06:00:00.000Z", price: 64_500 },
+      { timestamp: "2026-07-17T07:00:00.000Z", price: 64_750 },
+    ],
+  };
+  const series = chartSeries(history, snapshot, "btc");
+
+  assert.equal(series.labels.length, 51);
+  assert.equal(series.actual.length, series.labels.length);
+  assert.equal(series.forecast.length, series.labels.length);
+  assert.equal(series.actual.at(-1), null);
+  assert.equal(series.forecast[2], 65_000);
+  assert.equal(series.forecast.filter((value) => value !== null).length, 49);
+});
+
+test("unavailable forecast leaves the historical line untouched", () => {
+  const history = {
+    points: [
+      { timestamp: "2026-07-17T06:00:00.000Z", price: 64_500 },
+      { timestamp: "invalid", price: 64_750 },
+    ],
+  };
+  const series = chartSeries(history, { assets: {} }, "btc");
+
+  assert.deepEqual(series.labels, ["2026-07-17T06:00:00.000Z"]);
+  assert.deepEqual(series.actual, [64_500]);
+  assert.equal(series.forecast, null);
+});
+
+test("artifact version exposes its UTC generation timestamp", () => {
+  assert.equal(
+    artifactGeneratedAt("20260717T070000Z-a1b2c3d-gh987654321-1").toISOString(),
+    "2026-07-17T07:00:00.000Z",
+  );
+  assert.equal(artifactGeneratedAt("not-a-version"), null);
+});

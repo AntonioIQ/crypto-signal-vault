@@ -4,6 +4,27 @@
 
 ---
 
+## 2026-07-17 — Fase 2 visible: anclaje aprobado y línea punteada terminada
+
+**Runtime 2.4 cerrado por QA:**
+- `latest → previous` ahora también recupera un artefacto previo cuando `latest` contiene bytes JSON malformados; una falla real del store permanece aislada y no rompe el precio vivo.
+- Todo snapshot seed nuevo incluye explícitamente `forecast: { status: "unavailable" }`; la omisión queda reservada a seeds legacy.
+- QA-Guardian aprobó el paquete sin hallazgos después de las correcciones.
+
+**UI 2.5 implementada y aprobada:**
+- La gráfica une el precio ancla con exactamente 48 puntos futuros mediante una línea punteada, distinguible sin depender solo del color.
+- Dirección en lenguaje simple: «Probablemente suba», «Probablemente baje» o «Probablemente se mantenga».
+- La confianza solo muestra porcentaje cuando está medida; con evidencia insuficiente dice «Aún no medible». La precisión de 7 días permanece vacía hasta Fase 3.
+- Estados `fresh`, `stale` y `unavailable` explícitos; un forecast ausente o parcial no dibuja puntos ni inventa señal.
+- El último motivo circular del panel fue reemplazado por una línea sobria para mantener la identidad profesional de LikelyCoin.
+- Revisión visual local en desktop y 390 px: BTC/ETH, pronóstico disponible/no disponible, sin overflow ni errores de consola. Una regla CSS que mostraba la leyenda punteada sin forecast se detectó y corrigió durante esta revisión.
+
+**Verificación:** 67 pruebas Node + 26 Python verdes, build y `git diff --check` correctos. QA-Guardian aprobó 2.4 y 2.5 sin pendientes de código.
+
+**Pendiente externo:** GitHub Actions sigue sin `NETLIFY_AUTH_TOKEN` ni `NETLIFY_SITE_ID`; no puede hacerse todavía la primera publicación real a Blobs. Después faltan Lighthouse sobre branch deploy, revisión externa de Claude y el merge único a `main`.
+
+---
+
 ## 2026-07-16 — Fase 2 iniciada: núcleo del modelo, publicación y anclaje
 
 **Arquitectura primero:**

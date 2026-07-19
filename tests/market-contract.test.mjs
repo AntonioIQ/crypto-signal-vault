@@ -22,6 +22,7 @@ test('seed snapshot is valid and stale with null prices', () => {
   assert.equal(seed.stale, true);
   assert.equal(seed.assets.btc.price, null);
   assert.equal(seed.assets.eth.price, null);
+  assert.deepEqual(seed.forecast, { status: 'unavailable' });
 });
 
 test('fresh snapshot passes contract validation', () => {

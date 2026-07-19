@@ -12,6 +12,7 @@ import {
 } from "../netlify/lib/forecast-contract.mjs";
 import {
   createFreshSnapshot,
+  createSeedSnapshot,
   formatMexicoCityTimestamp,
   isValidSnapshot,
 } from "../netlify/lib/market-contract.mjs";
@@ -120,7 +121,12 @@ function makeModelStore(values = {}, { failReads = false } = {}) {
     async get(key, options) {
       calls.push([key, options]);
       if (failReads) throw new Error("model store unavailable");
-      return values[key] ?? null;
+      const value = values[key];
+      if (value === undefined || value === null) return null;
+      if (options?.type === "text" && typeof value !== "string") {
+        return JSON.stringify(value);
+      }
+      return value;
     },
   };
 }
@@ -147,12 +153,12 @@ test("selects a fresh latest artifact with a strong JSON read", async () => {
     new Date("2026-07-17T02:15:00-06:00"),
   );
 
-  assert.equal(selected.artifact, latest);
+  assert.deepEqual(selected.artifact, latest);
   assert.equal(selected.status, "fresh");
   assert.equal(selected.key, LATEST_FORECAST_KEY);
   assert.deepEqual(store.calls, [[LATEST_FORECAST_KEY, {
     consistency: "strong",
-    type: "json",
+    type: "text",
   }]]);
 });
 
@@ -169,7 +175,7 @@ test("keeps a stale but usable latest artifact without reading previous", async 
     new Date("2026-07-19T00:00:00-06:00"),
   );
 
-  assert.equal(selected.artifact, latest);
+  assert.deepEqual(selected.artifact, latest);
   assert.equal(selected.status, "stale");
   assert.deepEqual(store.calls.map(([key]) => key), [LATEST_FORECAST_KEY]);
 });
@@ -186,7 +192,27 @@ test("falls back from corrupt latest to a usable previous artifact", async () =>
     new Date("2026-07-17T02:15:00-06:00"),
   );
 
-  assert.equal(selected.artifact, previous);
+  assert.deepEqual(selected.artifact, previous);
+  assert.equal(selected.key, PREVIOUS_FORECAST_KEY);
+  assert.deepEqual(store.calls.map(([key]) => key), [
+    LATEST_FORECAST_KEY,
+    PREVIOUS_FORECAST_KEY,
+  ]);
+});
+
+test("falls back from malformed latest JSON bytes to a usable previous", async () => {
+  const previous = artifactFixture({ runId: "gh987654320-1" });
+  const store = makeModelStore({
+    [LATEST_FORECAST_KEY]: '{"schema_version":',
+    [PREVIOUS_FORECAST_KEY]: previous,
+  });
+
+  const selected = await readUsableForecastArtifact(
+    store,
+    new Date("2026-07-17T02:15:00-06:00"),
+  );
+
+  assert.deepEqual(selected.artifact, previous);
   assert.equal(selected.key, PREVIOUS_FORECAST_KEY);
   assert.deepEqual(store.calls.map(([key]) => key), [
     LATEST_FORECAST_KEY,
@@ -210,7 +236,7 @@ test("falls back from expired latest to a usable previous artifact", async () =>
     new Date("2026-07-17T02:15:00-06:00"),
   );
 
-  assert.equal(selected.artifact, previous);
+  assert.deepEqual(selected.artifact, previous);
   assert.equal(selected.status, "fresh");
 });
 
@@ -373,6 +399,12 @@ test("new fresh snapshots default to an unavailable forecast", () => {
     SAMPLE_PRICES,
     new Date("2026-07-17T02:15:00-06:00"),
   );
+  assert.deepEqual(snapshot.forecast, { status: "unavailable" });
+  assert.equal(isValidSnapshot(snapshot), true);
+});
+
+test("new seed snapshots include an explicit unavailable forecast", () => {
+  const snapshot = createSeedSnapshot();
   assert.deepEqual(snapshot.forecast, { status: "unavailable" });
   assert.equal(isValidSnapshot(snapshot), true);
 });
