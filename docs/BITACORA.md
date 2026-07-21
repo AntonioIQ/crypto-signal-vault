@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-21 — Chart.js local cierra M1 en QA local
+
+**M1 resuelto localmente:** `chart.js` quedó fijado exactamente en `4.4.9`. El build copia el bundle oficial `dist/chart.umd.js` a `public/js/vendor/chart.umd.js`; el frontend lo carga dinámicamente sin CDN y conserva el fallback si Chart.js no está disponible.
+
+**Validación:** Front-UX y QA-Guardian aprobaron el cambio. Pasaron 72 pruebas Node y 26 Python, además de build, `node --check`, `git diff --check` y `npm audit` con 0 vulnerabilidades. La revisión local en desktop y 390 px mostró BTC/ETH, gráfica y pronóstico correctos, sin overflow ni errores de consola. Lighthouse móvil local midió **93 performance, 100 accesibilidad, 100 Best Practices y 100 SEO**, con FCP 1.0 s, LCP 3.2 s, TBT 10 ms y CLS 0.001.
+
+**Sin efectos remotos:** todavía no hubo commit, push, Deploy Preview nuevo ni deploy de producción. El siguiente paso es publicar el delta batched en `feature/phase-2-model`, esperar CI/preview gratuitos, repetir Lighthouse remoto y pedir a Claude una confirmación breve antes del merge.
+
+---
+
+## 2026-07-20 — Revisión de continuidad de Fase 2
+
+Sin cambios de código ni deploy. La Fase 1 sigue cerrada y la Fase 2 conserva un único pendiente técnico local: servir Chart.js desde el propio build y repetir Lighthouse móvil. Después siguen la confirmación externa, un único merge batched y la primera ejecución manual de training.
+
+---
+
 ## 2026-07-19 — Claude aprueba Fase 2; checkpoint de observaciones menores
 
 **Revisión externa recibida:** Claude revisó la PR #1 en `8f388fd` y concluyó **«APROBACIÓN EXTERNA FASE 2: APTA PARA MERGE»**, sin bloqueantes ni hallazgos mayores. Reportó cinco observaciones menores.

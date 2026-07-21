@@ -150,6 +150,6 @@ test("artifact version exposes its UTC generation timestamp", () => {
 test("initial HTML does not parser-block on Chart.js and declares a favicon", async () => {
   const html = await readFile("public/index.html", "utf8");
 
-  assert.doesNotMatch(html, /<script[^>]+chart\.js/i);
+  assert.doesNotMatch(html, /<script[^>]+(?:chart(?:\.umd)?|vendor)/i);
   assert.match(html, /<link rel="icon" href="favicon\.svg"/);
 });

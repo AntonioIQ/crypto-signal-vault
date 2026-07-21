@@ -10,7 +10,7 @@ import {
 } from './forecast-ui.js';
 
 const TIMEZONE = 'America/Mexico_City';
-const CHART_JS_URL = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js';
+const CHART_JS_URL = '/js/vendor/chart.umd.js';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
 const STALE_AFTER_MS = 60 * 60 * 1000; // 4 missed runs: no longer "al día"
 const ANCHOR_TOLERANCE_MS = 2 * 60 * 60 * 1000; // max drift for the 24h anchor
