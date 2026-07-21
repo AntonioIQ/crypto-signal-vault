@@ -391,14 +391,96 @@ nuevo anclaje vuelve a ser `latest` y después `previous`; si ambos están
 corruptos, no soportados o expirados, `forecast` queda
 `{ "status": "unavailable" }` sin crear puntos nuevos.
 
-#### 2.4 Registro de predicciones de fases posteriores
+#### 2.4 Registro de predicciones y accuracy medida (Fase 3)
 
-**`data/predictions_log.json`** será append-only, con rotación mensual:
+La Fase 3 llena la tarjeta «Precisión de 7 días», hoy vacía, con accuracy
+**real medida** contra el precio que efectivamente ocurrió — nunca con backtest
+ni con la confianza del modelo. Esto es la regla de oro #3 hecha producto.
+
+**Dónde vive.** Igual que el artefacto de Fase 2, el registro y las métricas son
+estado mutable que crece a diario, así que **viven en Netlify Blobs, nunca en el
+repo** (un commit diario = un deploy de 15 créditos = 450/mes, imposible; ver
+`06_PRESUPUESTO.md`). El diseño original de `data/predictions_log.json`
+commiteado queda descartado por esa razón. Store dedicado `predictions`:
+
+| Key | Qué | Quién escribe |
+|---|---|---|
+| `log/current.json` | Registro append-only; se poda a 30 días para acotarlo | `predict.mjs` (registra) y `evaluate` (resuelve + poda) |
+| `metrics/accuracy.json` | Accuracy rolling de 7 días ya calculada | `evaluate` |
+| `metrics/health.json` | Huecos de datos y señales de drift | `evaluate` |
+
+**Contrato de un registro (`prediction-log/1.0`).** Cada entrada:
 
 ```json
-[{ "made_at": "...", "asset": "btc", "horizon_h": 24, "predicted": 65100,
-   "direction": "up", "actual": null, "resolved_at": null, "hit": null }]
+{
+  "id": "btc:2026-07-21T18:00:00Z:48",
+  "made_at": "2026-07-21T12:00:00-06:00",
+  "asset": "btc",
+  "horizon_h": 48,
+  "artifact_version": "20260721T070000Z-a1b2c3d-gh987654321-1",
+  "anchor_price": 64980.0,
+  "predicted": 66150.5,
+  "direction": "up",
+  "target_at": "2026-07-23T12:00:00-06:00",
+  "actual": null,
+  "resolved_at": null,
+  "hit": null
+}
 ```
+
+Reglas: `id = <asset>:<hora-UTC-truncada>:<horizon_h>` — determinista y con
+resolución horaria, de modo que registrar el mismo activo/hora/horizonte es
+idempotente aunque `predict.mjs` corra cada 15 min. `horizon_h` es `48` para
+medir exactamente la dirección que muestra la UI (la terminal del artefacto).
+`direction`, `anchor_price` (precio vivo del anclaje) y `predicted`
+(`points[48].price`) se copian del snapshot anclado. Mientras no se resuelva,
+`actual`, `resolved_at` y `hit` son `null`.
+
+**Registro (`predict.mjs`).** Cuando produce un snapshot fresco con forecast
+`fresh`, además registra —en un bloque aislado, sin poder romper el precio— una
+predicción por activo, deduplicada al bucket horario por `id`. ~24 registros por
+activo al día. Si el store de predicciones falla, el precio y el forecast siguen
+intactos.
+
+**Resolución y accuracy (`ml/evaluate.py` + `evaluate.yml`, 07:30 UTC).** Diario:
+descarga los históricos por `/api/history`, lee `log/current.json`, y para cada
+registro sin resolver cuyo `target_at` ya pasó busca el precio real más cercano
+±1 h. Si lo encuentra: `actual`, `resolved_at`, y
+`hit = (dirección real == dirección predicha)` con el mismo umbral `τ = 0.005`.
+Un registro sin dato real tras 24 h de gracia se marca resuelto con
+`hit: null` (no computa) para no quedar pendiente para siempre. La accuracy de
+7 días es `aciertos / resueltos` sobre los registros con `resolved_at` en los
+últimos 7 días y `hit` no nulo, **por activo**; con menos de **20** muestras
+resueltas el estado es `insufficient_data` y no se publica porcentaje. La
+resolución y el `health` usan la **serie horaria completa** (no el sufijo
+contiguo de entrenamiento), de modo que los huecos reales siguen siendo
+visibles: `health` cuenta cualquier separación mayor a 1 h en las últimas 24 h.
+No se commitea nada: `evaluate.yml` escribe a Blobs con `NETLIFY_AUTH_TOKEN` +
+`NETLIFY_SITE_ID`, igual que `train.yml`.
+
+**Bloque público `accuracy` del snapshot.** `predict.mjs` lee
+`metrics/accuracy.json` (aislado, como el forecast) y lo adjunta al snapshot como
+adición compatible al contrato base `1.0`. Ausente o no medible ⇒
+`{ "status": "unavailable" }`; nunca se inventa un porcentaje.
+
+```json
+{
+  "accuracy": {
+    "status": "available",
+    "window_days": 7,
+    "measured_through": "2026-07-21T01:30:00-06:00",
+    "assets": {
+      "btc": { "status": "available", "hit_rate": 58.3, "sample_size": 96 },
+      "eth": { "status": "insufficient_data", "hit_rate": null, "sample_size": 11 }
+    }
+  }
+}
+```
+
+`hit_rate` es porcentaje redondeado a un decimal (0–100) solo cuando
+`sample_size` alcanza el mínimo; si no, `insufficient_data` y `hit_rate: null`.
+La UI muestra el número por activo únicamente cuando existe; jamás rellena con la
+confianza del modelo ni con un valor esperado.
 
 ### 3. System prompt del Analista (v1)
 
@@ -435,9 +517,19 @@ crypto-signal-vault/
 │   ├── latest.mjs                # GET /api/latest: blob + fallback versionado
 │   ├── history.mjs               # GET /api/history?asset=: blob, 404 → seed
 │   └── chat.mjs                  # on-demand, Groq + rate limit
+├── netlify/lib/                  # contratos y helpers compartidos (validación)
+│   ├── contract-helpers.mjs      # primitivas de validación comunes
+│   ├── blob-log.mjs              # compare-and-swap por ETag para el log
+│   ├── market-contract.mjs       # snapshot: forecast + accuracy opcionales
+│   ├── forecast-contract.mjs     # artefacto forecast-artifact/1.0
+│   ├── prediction-contract.mjs   # registro prediction-log/1.0 + accuracy
+│   └── prediction-store.mjs      # registrar predicciones / leer accuracy
+├── scripts/
+│   ├── publish-forecast.mjs      # Fase 2: artefacto → Blobs
+│   └── publish-evaluation.mjs    # Fase 3: fetch log / publicar métricas → Blobs
 ├── ml/
 │   ├── train.py                  # entrenamiento + serialización
-│   ├── evaluate.py               # resolución de predicciones + drift
+│   ├── evaluate.py               # resolución de predicciones + accuracy + health
 │   ├── features.py
 │   └── requirements.txt
 ├── models/                       # fixtures de contrato; el vigente vive en Blobs
@@ -451,9 +543,12 @@ crypto-signal-vault/
 └── tests/
     ├── test_features.py
     ├── test_train_contract.py    # valida schema de artefactos
+    ├── test_evaluate.py          # resolución, accuracy rolling, huecos, poda
     ├── market-contract.test.mjs  # contrato de snapshot e histórico
     ├── functions.test.mjs        # latest/predict: fallbacks y stale
-    └── history-functions.test.mjs # refresh/history: aislamiento y 404 → seed
+    ├── history-functions.test.mjs # refresh/history: aislamiento y 404 → seed
+    ├── prediction-contract.test.mjs # registro + accuracy: forma y honestidad
+    └── prediction-store.test.mjs # registrar/leer accuracy: aislamiento
 ```
 
 **Nada mutable se versiona.** `models/`, `metrics/` y `data/` guardan seeds y
@@ -478,7 +573,7 @@ El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y co
 | Hora (UTC) | Proceso | Dónde |
 |---|---|---|
 | 07:00 diario | Entrenamiento + `model-artifacts/forecast/latest.json` + métricas → **a Blobs, no al repo** | GitHub Actions |
-| 07:30 diario | Evaluación de aciertos + drift | GitHub Actions |
+| 07:30 diario | Resolución de predicciones + accuracy 7d + health → **a Blobs (store `predictions`), no al repo** | GitHub Actions |
 | cada 15 min | Ingesta/anclaje + refresh de `market-data/latest.json` | Netlify Scheduled Fn |
 | cada 6 h | Refresh de `market-data/history/<asset>.json` (ventana de 30 días) | Netlify Scheduled Fn |
 | on-demand | Chat del analista | Netlify Function |

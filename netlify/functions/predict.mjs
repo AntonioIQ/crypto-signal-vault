@@ -13,6 +13,11 @@ import {
   formatMexicoCityTimestamp,
   isValidSnapshot,
 } from "../lib/market-contract.mjs";
+import {
+  PREDICTIONS_STORE,
+  unavailableAccuracy,
+} from "../lib/prediction-contract.mjs";
+import { readAccuracyBlock, recordPredictions } from "../lib/prediction-store.mjs";
 
 export const MARKET_DATA_STORE = "market-data";
 export const LATEST_SNAPSHOT_KEY = "latest.json";
@@ -48,24 +53,54 @@ export async function runPrediction({
   try {
     const prices = await fetchPrices();
     const anchoredAt = clock();
-    snapshot = createFreshSnapshot(prices, anchoredAt);
 
+    // Last measured accuracy, isolated: building or reading the predictions
+    // store must never affect the price, so the store factory itself is inside
+    // the guard and accuracy defaults to `unavailable`.
+    let predictionsStore = null;
+    let accuracy = unavailableAccuracy();
+    try {
+      predictionsStore = getStoreFn(PREDICTIONS_STORE);
+      accuracy = await readAccuracyBlock(predictionsStore);
+    } catch {
+      predictionsStore = null;
+      logger.warn(
+        "Accuracy read skipped; fresh market data remains available.",
+      );
+    }
+
+    let forecast;
     try {
       const modelStore = getStoreFn(MODEL_ARTIFACTS_STORE);
+      const baseSnapshot = createFreshSnapshot(prices, anchoredAt);
       const selected = await readUsableForecastArtifact(modelStore, anchoredAt);
       if (selected) {
-        const forecast = anchorForecast(
+        forecast = anchorForecast(
           selected.artifact,
           selected.status,
-          snapshot,
+          baseSnapshot,
           formatMexicoCityTimestamp,
         );
-        snapshot = createFreshSnapshot(prices, anchoredAt, forecast);
       }
     } catch {
       logger.warn(
         "Forecast anchoring skipped; fresh market data remains available.",
       );
+    }
+
+    snapshot = createFreshSnapshot(prices, anchoredAt, forecast, accuracy);
+
+    // Record this anchor's predictions for later evaluation, isolated so a
+    // logging failure never blocks the price snapshot. Skipped entirely if the
+    // predictions store could not be built above.
+    if (predictionsStore) {
+      try {
+        await recordPredictions(predictionsStore, snapshot);
+      } catch {
+        logger.warn(
+          "Prediction logging skipped; the price snapshot is unaffected.",
+        );
+      }
     }
 
     status = "fresh";

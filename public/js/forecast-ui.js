@@ -1,3 +1,7 @@
+// Mirrors MIN_ACCURACY_SAMPLES in netlify/lib/prediction-contract.mjs; kept as
+// a local constant so this browser module has no Node-side imports.
+const MIN_ACCURACY_SAMPLES = 20;
+
 const DIRECTION_COPY = {
   up: {
     label: "Probablemente suba",
@@ -100,6 +104,41 @@ export function artifactGeneratedAt(artifactVersion) {
   const [, year, month, day, hour, minute, second] = match;
   const generatedAt = new Date(`${year}-${month}-${day}T${hour}:${minute}:${second}Z`);
   return Number.isFinite(generatedAt.getTime()) ? generatedAt : null;
+}
+
+// Measured 7-day accuracy for one asset. Shows a percentage only when the
+// evaluator published `available` with enough samples; otherwise the card stays
+// honestly blank and never borrows the model's confidence as a stand-in.
+export function accuracyView(snapshot, asset) {
+  const blank = { available: false, label: "—", status: "TRAS 7 DÍAS MEDIDOS" };
+  const accuracy = snapshot?.accuracy;
+  if (!accuracy || accuracy.status !== "available") return blank;
+
+  const item = accuracy.assets?.[asset];
+  if (!item) return blank;
+
+  // Defense in depth: even if a block claims `available`, never show a
+  // percentage without the measured minimum of resolved predictions.
+  if (
+    item.status === "available" &&
+    typeof item.hit_rate === "number" &&
+    Number.isFinite(item.hit_rate) &&
+    Number.isInteger(item.sample_size) &&
+    item.sample_size >= MIN_ACCURACY_SAMPLES
+  ) {
+    return {
+      available: true,
+      label: `${Math.round(item.hit_rate)} %`,
+      status: `${item.sample_size} predicciones medidas`,
+    };
+  }
+
+  if (item.status === "insufficient_data") {
+    const size = Number.isInteger(item.sample_size) ? item.sample_size : 0;
+    return { available: false, label: "—", status: `MIDIENDO (${size})` };
+  }
+
+  return blank;
 }
 
 export function chartSeries(history, snapshot, asset) {

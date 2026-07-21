@@ -20,6 +20,7 @@ import {
   MARKET_DATA_STORE,
   runPrediction,
 } from "../netlify/functions/predict.mjs";
+import { PREDICTIONS_STORE } from "../netlify/lib/prediction-contract.mjs";
 
 const SAMPLE_PRICES = {
   btc: { price: 65000.25, sourceUpdatedAt: "2026-07-17T08:14:31.000Z" },
@@ -351,10 +352,38 @@ test("model store outage never breaks fresh market prices", async () => {
   assert.equal(snapshot.stale, false);
   assert.equal(snapshot.assets.btc.price, SAMPLE_PRICES.btc.price);
   assert.deepEqual(snapshot.forecast, { status: "unavailable" });
-  assert.deepEqual(storesRequested, [MARKET_DATA_STORE, MODEL_ARTIFACTS_STORE]);
+  assert.deepEqual(storesRequested, [
+    MARKET_DATA_STORE,
+    PREDICTIONS_STORE,
+    MODEL_ARTIFACTS_STORE,
+  ]);
   assert.deepEqual(warnings, [
     "Forecast anchoring skipped; fresh market data remains available.",
   ]);
+});
+
+test("predictions store factory failure never breaks fresh market prices", async () => {
+  const marketStore = makeMarketStore();
+  const warnings = [];
+
+  const { status, snapshot } = await runPrediction({
+    getStoreFn: (name) => {
+      if (name === PREDICTIONS_STORE) throw new Error("predictions store down");
+      return marketStore;
+    },
+    fetchPrices: async () => SAMPLE_PRICES,
+    clock: () => new Date("2026-07-17T02:15:00-06:00"),
+    logger: { warn: (message) => warnings.push(message) },
+  });
+
+  assert.equal(status, "fresh");
+  assert.equal(snapshot.stale, false);
+  assert.equal(snapshot.assets.btc.price, SAMPLE_PRICES.btc.price);
+  assert.deepEqual(snapshot.accuracy, { status: "unavailable" });
+  assert.ok(
+    warnings.includes("Accuracy read skipped; fresh market data remains available."),
+    "a store-factory failure is warned, not fatal",
+  );
 });
 
 test("CoinGecko failure preserves anchor and points while forecast ages", async () => {

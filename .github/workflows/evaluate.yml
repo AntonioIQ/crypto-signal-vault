@@ -1,0 +1,83 @@
+name: Daily prediction evaluation
+
+on:
+  schedule:
+    - cron: '30 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-prediction-evaluation-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  evaluate-and-publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Node.js dependencies
+        run: npm ci
+
+      - name: Run Python tests
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
+      - name: Download public market histories
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/history"
+          for asset in btc eth; do
+            curl --fail --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+              "https://likelycoin.netlify.app/api/history?asset=${asset}" \
+              --output "${RUNNER_TEMP}/history/${asset}.json"
+          done
+
+      - name: Fetch current predictions log from Blobs
+        env:
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: node scripts/publish-evaluation.mjs fetch "${RUNNER_TEMP}/log-current.json"
+
+      - name: Resolve predictions and measure accuracy
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/out"
+          python ml/evaluate.py \
+            --log "${RUNNER_TEMP}/log-current.json" \
+            --history-dir "${RUNNER_TEMP}/history" \
+            --out-log "${RUNNER_TEMP}/out/log-current.json" \
+            --out-accuracy "${RUNNER_TEMP}/out/accuracy.json" \
+            --out-health "${RUNNER_TEMP}/out/health.json"
+
+      - name: Run Node.js tests
+        run: npm test
+
+      - name: Publish evaluation to Netlify Blobs
+        env:
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+        run: |
+          node scripts/publish-evaluation.mjs publish \
+            "${RUNNER_TEMP}/out/log-current.json" \
+            "${RUNNER_TEMP}/out/accuracy.json" \
+            "${RUNNER_TEMP}/out/health.json" \
+            "${RUNNER_TEMP}/log-current.json"

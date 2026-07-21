@@ -8,9 +8,35 @@ import unittest
 from ml.features import (
     HistoryValidationError,
     load_history,
+    normalized_hourly_series,
     terminal_return,
     validate_history_document,
 )
+
+
+class FullVsSuffixTests(unittest.TestCase):
+    def test_full_series_keeps_the_gap_that_the_suffix_drops(self) -> None:
+        # A 3-hour gap between the first point and the rest.
+        document = {
+            "schema_version": "1.0",
+            "asset": "btc",
+            "coin_id": "bitcoin",
+            "currency": "usd",
+            "generated_at": "2026-01-01T06:30:00Z",
+            "points": [
+                {"timestamp": "2026-01-01T00:00:00Z", "price": 100.0},
+                {"timestamp": "2026-01-01T04:00:00Z", "price": 104.0},
+                {"timestamp": "2026-01-01T05:00:00Z", "price": 105.0},
+            ],
+        }
+        full = normalized_hourly_series(document, "btc")
+        suffix = validate_history_document(document, "btc")
+        # The full series (used by health/resolution) keeps the pre-gap point;
+        # the contiguous suffix (used by training) drops everything before the gap.
+        self.assertEqual(3, len(full))
+        self.assertEqual(2, len(suffix))
+        self.assertEqual(100.0, full[0].price)
+        self.assertEqual(104.0, suffix[0].price)
 
 
 def history_document(asset: str = "btc") -> dict:

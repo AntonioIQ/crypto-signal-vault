@@ -2,9 +2,45 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 12:01 (hora CDMX)
+**Última actualización**: 2026-07-21 15:40 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
+
+## Fase activa: FASE 3 — MLOps · «la honestidad medida»
+
+**Rama de trabajo**: `feature/phase-3-evaluation` (sin deploy de producción).
+**Reparto invertido esta fase**: la **construye Claude**; la **revisa Codex** antes de cerrarla (quien construye no cierra).
+
+| # | Paquete | Estado |
+|---|---|---|
+| 3.1 | Contrato `prediction-log/1.0` + bloque público `accuracy` en el snapshot | ☑ Documentado en `01_ARQUITECTURA.md` §2.4 antes del código |
+| 3.2 | Registro de predicciones desde `predict.mjs` a Blobs (store `predictions`), deduplicado por hora | ☑ Implementado y probado; aislado, no puede romper el precio |
+| 3.3 | `ml/evaluate.py`: resolución ±1h contra precio real, accuracy rolling 7d, health de huecos, poda a 30d | ☑ Implementado y probado (unidad + e2e) |
+| 3.4 | `evaluate.yml` (07:30 UTC) + `scripts/publish-evaluation.mjs` a Blobs con secrets | ☑ Implementado; publicación real pendiente del merge |
+| 3.5 | Tarjeta «Precisión de 7 días» con accuracy medida (—/porcentaje/«MIDIENDO») | ☑ Implementado y verificado en navegador |
+| 3.6 | QA completo + revisión externa de Codex + merge batched a `main` | ◐ Codex revisó (1 bloqueante + 4 mayores + 1 menor); **los 6 corregidos**. Pendiente: re-revisión, merge y primera ejecución real |
+
+### Correcciones de la revisión de Codex (2026-07-21)
+
+- **Bloqueante — escrituras concurrentes del log**: `predict.mjs` (registra cada 15 min) y el `evaluate` diario ya no se pisan. Nuevo `blob-log.mjs` con compare-and-swap por ETag (`onlyIfMatch`/`onlyIfNew` + reintento); el publicador hace merge con el baseline descargado, así una predicción agregada durante el job se conserva. Prueba de concurrencia añadida.
+- **Mayor — accuracy sin umbral**: el contrato ahora exige `available ⇒ sample_size ≥ 20`, `insufficient_data ⇒ < 20`, `window_days === 7`; la UI repite el guard defensivamente. Pruebas 19/20/25.
+- **Mayor — verdad semántica del registro**: el contrato valida `direction` contra `predicted/anchor`, `hit` contra el precio real, y `resolved_at ≥ target_at`. Pruebas negativas.
+- **Mayor — store `predictions` no aislado**: la construcción del store se movió a su propio try en `predict.mjs`; un fallo del factory ya no tumba el precio. Prueba añadida.
+- **Mayor — health no veía huecos**: `evaluate.py` usa la serie horaria **completa** (nueva `load_history_full`), no el sufijo contiguo de entrenamiento; cuenta separaciones > 1 h. Prueba full-vs-suffix.
+- **Menor — rotación inexistente**: la doc §2.4 ya describe la retención real (poda a 30 d), sin prometer `archive/`; y accuracy es «por activo» (no «global»).
+
+### Validación de Fase 3 (checkpoint local, sin deploy)
+
+- **94 pruebas Node + 39 Python verdes**; build, `node --check`, `git diff --check` y `npm audit` (0 vulns) correctos.
+- **Contrato cruza el límite de lenguaje**: el JSON que escribe `evaluate.py` (Python) pasa `assertValidPredictionRecord`/`assertValidAccuracy` (JS) tanto al publicar como al leer en `predict.mjs`. Verificado end-to-end con log+histórico sintéticos: 25 predicciones resueltas, accuracy 100 % (subida real > umbral).
+- **UI verificada en navegador** con snapshot que lleva accuracy: BTC «58 % / 96 predicciones medidas»; ETH «— / MIDIENDO (11)» (dato insuficiente, no pide prestada la confianza del modelo). Cero errores de consola.
+- **Honestidad preservada**: accuracy solo aparece cuando hay ≥20 predicciones resueltas *con dato real*; nunca backtest, nunca confianza, nunca un mínimo artificial.
+- **Aislamiento**: un fallo del store `predictions` (lectura de accuracy o registro) no rompe el precio ni el forecast — probado.
+- **Presupuesto intacto**: `evaluate.yml` es otra corrida de GitHub Actions (gratis), escribe a Blobs, **cero commits y cero deploys diarios**. El estado mutable (log, métricas) nunca toca el repo.
+
+### Prerequisito para la primera ejecución real (post-merge)
+
+Los secrets `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` ya existen (creados en Fase 2); `evaluate.yml` los reutiliza. La primera accuracy medible aparece ~48 h después de acumular predicciones resueltas suficientes; hasta entonces la tarjeta dice «MIDIENDO», que es correcto.
 
 ## FASE 2 — Modelo · «la línea punteada» — CERRADA ✅
 
@@ -108,12 +144,13 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Preparar la Fase 3 —`predictions_log`, evaluación y accuracy real medida— sin implementarla hasta documentar su alcance y completar su apertura formal.
+➡️ **Revisión externa de Codex** sobre la rama `feature/phase-3-evaluation` (PR por abrir). Si no hay bloqueantes: merge único a `main` y primera ejecución manual de `Daily prediction evaluation`.
 
-**Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
+**Para el revisor (Codex) — qué mirar con lupa:**
+- La accuracy publicada es medida, nunca backtest ni confianza (`ml/evaluate.py`, `forecast-ui.js accuracyView`).
+- Aislamiento del store `predictions` en `predict.mjs`: un fallo ahí no toca el precio.
+- El contrato cruza Python↔JS: `evaluate.py` produce lo que `prediction-contract.mjs` valida; `publish-evaluation.mjs` valida antes de escribir.
+- Resolución sin interpolación (±1h, hueco real ⇒ sin dato), poda del log a 30d, dedup por id horario.
+- Presupuesto: `evaluate.yml` no commitea ni deploya; solo `main` publica.
 
-**Prerequisito de Antonio — COMPLETO el 19 jul**: repository secrets confirmados por nombre en GitHub Actions:
-1. `NETLIFY_AUTH_TOKEN` — se genera en Netlify: User settings → Applications → Personal access tokens.
-2. `NETLIFY_SITE_ID` — ya conocido: `3cf1b734-b2b4-4b52-b8a2-a215aae09153` (el "Project ID" de likelycoin).
-
-**Recordatorios de presupuesto para quien construya** (`06_PRESUPUESTO.md`): iterar en `feature/*` o `dev` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), y los pushes solo-docs no construyen. Plan B del modelo si Prophet da guerra >1 sesión: statsmodels o GBM ligero (R-07) — el contrato del artefacto es agnóstico.
+**Recordatorios de presupuesto** (`06_PRESUPUESTO.md`): iterar en `feature/*` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), y los pushes solo-docs no construyen. Secrets de Blobs (`NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID`) ya existen desde Fase 2; `evaluate.yml` los reutiliza.
