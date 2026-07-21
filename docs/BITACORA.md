@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-07-21 — Handoff de autenticación para el primer training
+
+Antonio autorizó iniciar `Daily forecast training` desde el navegador integrado. La página del workflow abrió correctamente, pero GitHub mostró la sesión cerrada; se dejó visible la pantalla oficial de acceso para que Antonio inicie sesión sin compartir credenciales. Al responder «listo», Codex continuará con **Run workflow**, validación de la publicación en Blobs y cierre de Fase 2.
+
+---
+
 ## 2026-07-21 — Fase 2 integrada; activación del forecast pendiente
 
 **Revisión y merge:** Claude confirmó exactamente **«CONFIRMACIÓN FINAL FASE 2: APTA PARA MERGE»**, sin hallazgos. La PR #1 quedó integrada por fast-forward estricto a `main` en `4a41cb7`.

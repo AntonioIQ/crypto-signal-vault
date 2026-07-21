@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 11:37 (hora CDMX)
+**Última actualización**: 2026-07-21 11:43 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
@@ -41,7 +41,7 @@
 - Lighthouse móvil local: **performance 93, accesibilidad 100, Best Practices 100 y SEO 100**; FCP 1.0 s, LCP 3.2 s, TBT 10 ms y CLS 0.001. Lighthouse móvil remoto limpio: **performance 98, accesibilidad 100 y Best Practices 100**.
 - Producción ya sirve `/js/vendor/chart.umd.js` con HTTP 200 y **206670 bytes** desde el build integrado.
 - `/api/latest` conserva un snapshot fresco, pero todavía es legacy y no incluye `forecast`. La señal aparecerá después de ejecutar manualmente `Daily forecast training` y de que posteriormente corra `predict`.
-- El conector de GitHub no tiene permisos para Actions ni merge, y la autenticación local de `gh` es inválida; por esas vías no se puede iniciar el workflow.
+- El conector de GitHub no tiene permisos para Actions ni merge, y la autenticación local de `gh` es inválida. Antonio autorizó usar el navegador integrado, pero su sesión de GitHub está cerrada; la pestaña de acceso quedó abierta para handoff.
 
 ### FASE 1 — Fundación · «la página viva» — CERRADA
 
@@ -100,7 +100,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Obtener autorización de Antonio para usar el navegador con su sesión y pulsar **Run workflow** en `Daily forecast training`, o que él pulse el botón directamente. Después deberá correr `predict` para anclar y exponer el forecast.
+➡️ Antonio inicia sesión en GitHub desde la pestaña visible del navegador integrado y responde «listo». Codex pulsa **Run workflow** en `Daily forecast training`; después se espera `predict` para anclar y exponer el forecast.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 
