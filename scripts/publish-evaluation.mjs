@@ -122,8 +122,10 @@ export async function main(argv = process.argv.slice(2)) {
   }
   if (mode === 'publish') {
     const [logPath, accuracyPath, healthPath, baselinePath] = rest;
-    if (!logPath || !accuracyPath || !healthPath) {
-      throw new EvaluationPublicationError('publish requires log, accuracy and health paths');
+    // The baseline is what makes the concurrent-append merge correct, so the
+    // canonical CLI requires it even though the library keeps a safe default.
+    if (!logPath || !accuracyPath || !healthPath || !baselinePath) {
+      throw new EvaluationPublicationError('publish requires log, accuracy, health and baseline paths');
     }
     const result = await publishEvaluation({ store, logPath, accuracyPath, healthPath, baselinePath });
     console.log(`published evaluation: ${result.resolved} predictions, accuracy ${result.accuracyStatus}`);
