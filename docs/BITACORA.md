@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-21 — Fase 2 integrada; activación del forecast pendiente
+
+**Revisión y merge:** Claude confirmó exactamente **«CONFIRMACIÓN FINAL FASE 2: APTA PARA MERGE»**, sin hallazgos. La PR #1 quedó integrada por fast-forward estricto a `main` en `4a41cb7`.
+
+**Producción verificada:** Netlify ya sirve `/js/vendor/chart.umd.js` con HTTP 200 y 206670 bytes. `/api/latest` continúa entregando un snapshot fresco, pero legacy y todavía sin `forecast`; la señal aparecerá después de ejecutar `Daily forecast training` y de que posteriormente corra `predict`.
+
+**Bloqueo operativo:** el conector de GitHub carece de permisos para Actions y merge, mientras que `gh` local tiene autenticación inválida. El siguiente paso único es obtener autorización de Antonio para usar el navegador con su sesión y pulsar **Run workflow**, o que él pulse el botón directamente. La Fase 2 permanece abierta hasta publicar y verificar el primer forecast real.
+
+---
+
 ## 2026-07-21 — M1 validado en el deploy remoto limpio
 
 **Publicación de la rama:** los fixes de la revisión externa y Chart.js local quedaron en `feature/phase-2-model` hasta `9f01ea0`. La CI de GitHub y el Deploy Preview de Netlify terminaron en verde; producción permaneció intacta.
