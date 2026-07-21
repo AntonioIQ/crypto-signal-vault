@@ -1,5 +1,32 @@
 # CHANGELOG
 
+## Fase 3 — MLOps · «la honestidad medida» — CERRADA 2026-07-21
+
+**Entregable**: la tarjeta «Precisión de 7 días», antes vacía, ahora se llena con accuracy **medida contra el precio real que ocurrió** — nunca backtest, nunca la confianza del modelo. Regla de oro #3 hecha producto. Costo de operación: $0.
+
+### Qué se construyó
+
+- **Contrato `prediction-log/1.0`** (`prediction-contract.mjs`): registro por predicción con id horario idempotente, dirección con umbral 0.5 %, y bloque público `accuracy`. El validador impone la verdad semántica (dirección coherente con `predicted/anchor`, `hit` coherente con el precio real, `resolved_at ≥ target_at`) y el umbral de honestidad (`available` solo con ≥20 muestras; ventana de 7 días).
+- **Estado en Netlify Blobs, nunca en el repo** (store `predictions`): `predict.mjs` registra una predicción por activo al anclar un forecast `fresh`, con compare-and-swap por ETag (`blob-log.mjs`) para no perder escrituras concurrentes; todo aislado, un fallo del store no toca el precio.
+- **`ml/evaluate.py` + `evaluate.yml` (07:30 UTC)**: resuelve predicciones vencidas contra el precio real más cercano ±1 h (serie horaria completa, sin interpolar), calcula accuracy rolling de 7 días por activo, reporta huecos/pendientes en `health`, y poda el log a 30 días. Publica a Blobs con merge contra el baseline; cero commits, cero deploys diarios.
+- **UI** (`forecast-ui.js accuracyView` + `app.js`): la tarjeta muestra el porcentaje solo cuando hay ≥20 predicciones medidas; si no, «MIDIENDO (n)».
+
+### Revisión externa (reparto invertido: Claude construyó, Codex revisó)
+
+- Codex encontró 1 bloqueante + 4 mayores + 1 menor; los 6 corregidos y confirmados en una segunda pasada (**«CONFIRMACIÓN FINAL FASE 3: APTA PARA MERGE»**). El bloqueante era pérdida de predicciones por escrituras concurrentes → resuelto con CAS por ETag + merge con baseline.
+- 94 pruebas Node + 39 Python; build, `npm audit` (0 vulns), `git diff --check` limpios. E2e Python→JS revalidado contra el contrato endurecido.
+
+### Verificación operativa en producción
+
+- PR #2 integrada a `main` (`934a78b`); un solo deploy productivo de 15 créditos.
+- Primera corrida real de `Daily prediction evaluation` (run `29877442181`) en **success** end-to-end, incluida la publicación a Netlify Blobs.
+- `/api/latest` sirve el bloque `accuracy` (`available`, ambos activos `insufficient_data` con muestra 0 sobre un log recién iniciado — honesto).
+- UI productiva: tarjeta «MIDIENDO (0)» en BTC y ETH, precio y pronóstico intactos, sin errores de consola.
+
+### Siguiente
+
+La primera accuracy con porcentaje aparece cuando se acumulen ≥20 predicciones resueltas (~48 h de registro). Fase 4: el chat del Analista.
+
 ## Fase 2 — Modelo · «la línea punteada» — CERRADA 2026-07-21
 
 **Entregable**: pronóstico real de 48 horas para BTC y ETH, entrenado diariamente en GitHub Actions, publicado en Netlify Blobs, anclado al precio vivo y presentado en `https://likelycoin.netlify.app` con lenguaje simple. Costo de operación: $0.

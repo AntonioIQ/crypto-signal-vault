@@ -2,11 +2,13 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 15:40 (hora CDMX)
+**Última actualización**: 2026-07-21 17:45 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: FASE 3 — MLOps · «la honestidad medida»
+## Fase activa: ninguna — FASE 3 CERRADA ✅ (2026-07-21); FASE 4 lista para arrancar
+
+### FASE 3 — MLOps · «la honestidad medida» — CERRADA
 
 **Rama de trabajo**: `feature/phase-3-evaluation` (sin deploy de producción).
 **Reparto invertido esta fase**: la **construye Claude**; la **revisa Codex** antes de cerrarla (quien construye no cierra).
@@ -18,7 +20,7 @@
 | 3.3 | `ml/evaluate.py`: resolución ±1h contra precio real, accuracy rolling 7d, health de huecos, poda a 30d | ☑ Implementado y probado (unidad + e2e) |
 | 3.4 | `evaluate.yml` (07:30 UTC) + `scripts/publish-evaluation.mjs` a Blobs con secrets | ☑ Implementado; publicación real pendiente del merge |
 | 3.5 | Tarjeta «Precisión de 7 días» con accuracy medida (—/porcentaje/«MIDIENDO») | ☑ Implementado y verificado en navegador |
-| 3.6 | QA completo + revisión externa de Codex + merge batched a `main` | ◐ Codex revisó (1 bloqueante + 4 mayores + 1 menor); **los 6 corregidos**. Pendiente: re-revisión, merge y primera ejecución real |
+| 3.6 | QA completo + revisión externa de Codex + merge batched a `main` | ☑ Codex confirmó APTA (los 6 hallazgos corregidos); PR #2 mergeada a `main` (`934a78b`), 1 deploy; primera corrida real de `evaluate.yml` en success y accuracy fluyendo al snapshot |
 
 ### Correcciones de la revisión de Codex (2026-07-21)
 
@@ -144,13 +146,10 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Revisión externa de Codex** sobre la rama `feature/phase-3-evaluation` (PR por abrir). Si no hay bloqueantes: merge único a `main` y primera ejecución manual de `Daily prediction evaluation`.
+➡️ **Dejar acumular predicciones ~48 h**: la tarjeta muestra «MIDIENDO (0)» hasta juntar ≥20 predicciones resueltas por activo; ahí aparece el primer porcentaje real. `evaluate.yml` corre solo a diario (07:30 UTC). Después, **arrancar la FASE 4 — Analista · «el chat»** (`05_PLAN_EJECUCION.md`): `chat.mjs` con Groq, system prompt v1 (ya en `01_ARQUITECTURA.md` §3), rate limit doble, fallback de plantillas, feature flag `CHAT_ENABLED`.
 
-**Para el revisor (Codex) — qué mirar con lupa:**
-- La accuracy publicada es medida, nunca backtest ni confianza (`ml/evaluate.py`, `forecast-ui.js accuracyView`).
-- Aislamiento del store `predictions` en `predict.mjs`: un fallo ahí no toca el precio.
-- El contrato cruza Python↔JS: `evaluate.py` produce lo que `prediction-contract.mjs` valida; `publish-evaluation.mjs` valida antes de escribir.
-- Resolución sin interpolación (±1h, hueco real ⇒ sin dato), poda del log a 30d, dedup por id horario.
-- Presupuesto: `evaluate.yml` no commitea ni deploya; solo `main` publica.
+**Verificación de que el ciclo de Fase 3 vive** (vistazo, sin acción): `/api/latest` debe traer `accuracy.status: available`; tras ~48 h, algún activo debe pasar a `hit_rate` con `sample_size ≥ 20`. Si el sample_size no crece, revisar que `predict` esté registrando (log en el store `predictions`).
 
-**Recordatorios de presupuesto** (`06_PRESUPUESTO.md`): iterar en `feature/*` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), y los pushes solo-docs no construyen. Secrets de Blobs (`NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID`) ya existen desde Fase 2; `evaluate.yml` los reutiliza.
+**Deuda no bloqueante heredada de Fase 2**: GitHub Actions fuerza las actions v4 a Node 24 (los runs pasan). Revisar el upgrade en algún momento de Fase 4.
+
+**Recordatorios de presupuesto** (`06_PRESUPUESTO.md`): iterar en `feature/*` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), pushes solo-docs no construyen. Secrets de Blobs ya existen; el reparto de Fase 4 lo decide Antonio.

@@ -4,6 +4,21 @@
 
 ---
 
+## 2026-07-21 — FASE 3 CERRADA ✅
+
+**Codex confirmó APTA** tras verificar que los 6 hallazgos quedaron resueltos (segunda pasada sobre `047b95c…568dba3`), con un único residual no bloqueante: `baselinePath` opcional en llamadas directas al publicador. Lo cerré haciéndolo obligatorio en el CLI canónico (`3a0b606`), la biblioteca conserva su default seguro.
+
+**Merge y activación (hechos por Claude con autorización de Antonio):**
+- PR #2 mergeada a `main` (`934a78b`). Netlify desplegó la Fase 3 en ~10 s (app.js con `accuracyView`). Un solo deploy de 15 créditos.
+- Primera corrida real de `Daily prediction evaluation` (run `29877442181`): **success** en los 15 steps, incluida la publicación a Netlify Blobs sobre un log vacío.
+- Verificado en producción: `/api/latest` trae `accuracy.status: available` con ambos activos `insufficient_data` / muestra 0 (correcto: nada medido aún). La UI muestra «MIDIENDO (0)» en BTC y ETH, precio y pronóstico intactos, sin errores de consola.
+
+**Estado del ciclo:** `predict` (cada 15 min) ya corre con el código nuevo y registra predicciones al anclar; `evaluate` corre a diario. La primera accuracy con porcentaje aparece cuando se acumulen ≥20 predicciones resueltas por activo (~48 h). Resumen completo en `CHANGELOG.md`.
+
+**Siguiente:** dejar acumular; luego Fase 4 (el chat del Analista).
+
+---
+
 ## 2026-07-21 — Fase 3: correcciones de la revisión de Codex
 
 Codex revisó la PR #2 y encontró 1 bloqueante, 4 mayores y 1 menor — una revisión buena, casi todo real. Corregidos los seis:
