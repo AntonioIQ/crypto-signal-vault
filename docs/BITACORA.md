@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-07-21 — FASE 2 CERRADA ✅
+
+**Pipeline real verificado:** `Daily forecast training` #1 —run `29854592038`, job `88715662743`, sobre `main` en `a44db3e`— terminó en **success**. Ejecutó 26 pruebas Python, 72 Node, entrenamiento y publicación. El artefacto `20260721T175020Z-a44db3e34bc969fc02f31132bcb22bb538c7421d-gh29854592038-1` quedó publicado y verificado en Netlify Blobs.
+
+**Anclaje y producto:** una única ejecución directa de `/.netlify/functions/predict` respondió HTTP 200 y ancló a `2026-07-21T11:52:05-06:00`. `/api/latest` quedó fresco (`stale: false`, `forecast.status: fresh`) con 48 puntos para BTC y 48 para ETH. BTC reportó dirección `down`, −3.1511 % y confianza 72.5 % con muestra 40; ETH, `down`, −3.4374 % y confianza 87.5 % con muestra 40. La accuracy permanece ausente hasta que la Fase 3 la mida contra el log real.
+
+**QA final:** la UI productiva pasó desktop y 390 px con BTC/ETH, línea punteada, lenguaje simple, «Datos al día», entrenamiento 11:50 CDMX, cero consola y cero overflow. QA-Guardian aprobó sin hallazgos; Chart.js es byte-idéntico a 4.4.9 y no usa jsDelivr. El checklist de `docs/04_QA.md` quedó completo: CI/tests, responsive, dark fijo —tema del sistema no aplica—, estados cubiertos por tests, disclaimers, sin debug ni claves, redondeo/CDMX, Lighthouse remoto limpio 98/100 y docs actualizados. Claude ya había confirmado **«CONFIRMACIÓN FINAL FASE 2: APTA PARA MERGE»** sin hallazgos.
+
+**Presupuesto:** hubo un solo deploy productivo de 15 créditos. Los commits posteriores solo-documentación fueron ignorados por Netlify y no desplegaron.
+
+**Deuda no bloqueante:** GitHub Actions advierte que actions v4 apuntan a Node 20 y las fuerza a Node 24. El run pasó; revisar el upgrade al preparar Fase 3.
+
+**Siguiente:** preparar Fase 3 (`predictions_log`, evaluación y accuracy real) sin implementarla todavía.
+
+---
+
 ## 2026-07-21 — Handoff de autenticación para el primer training
 
 Antonio autorizó iniciar `Daily forecast training` desde el navegador integrado. La página del workflow abrió correctamente, pero GitHub mostró la sesión cerrada; se dejó visible la pantalla oficial de acceso para que Antonio inicie sesión sin compartir credenciales. Al responder «listo», Codex continuará con **Run workflow**, validación de la publicación en Blobs y cierre de Fase 2.

@@ -1,5 +1,51 @@
 # CHANGELOG
 
+## Fase 2 — Modelo · «la línea punteada» — CERRADA 2026-07-21
+
+**Entregable**: pronóstico real de 48 horas para BTC y ETH, entrenado diariamente en GitHub Actions, publicado en Netlify Blobs, anclado al precio vivo y presentado en `https://likelycoin.netlify.app` con lenguaje simple. Costo de operación: $0.
+
+### Qué se construyó
+
+- **Contrato agnóstico `forecast-artifact/1.0`**: 48 factores horarios por activo, dirección simple, confianza rolling-origin separada de accuracy, expiración y rollback `latest → previous`.
+- **Pipeline ML** (`ml/features.py`, `ml/train.py`): Prophet 1.3.0, histórico reciente y contiguo, validación rolling-origin y artefacto JSON validado antes de publicarse.
+- **Entrenamiento diario** (`Daily forecast training`): CI Python/Node, gate a `main`, publicación versionada en el store `model-artifacts`, read-back fuerte y rollback, sin commits de estado ni deploys diarios.
+- **Serving tolerante a fallos**: `predict.mjs` lee `latest → previous`, ancla 48 horas al precio vivo y conserva el precio aunque el forecast esté ausente, vencido o corrupto.
+- **Dashboard productivo**: línea sólida para histórico, línea punteada para pronóstico, dirección y confianza en lenguaje simple, estados `fresh/stale/unavailable`, precisión vacía hasta tener evidencia real.
+- **Chart.js 4.4.9 local**: bundle oficial copiado al build, carga dinámica con fallback, sin CDN ni dependencia de jsDelivr.
+
+### Verificación operativa en producción
+
+- PR #1 integrada por fast-forward estricto a `main`; Claude confirmó **«CONFIRMACIÓN FINAL FASE 2: APTA PARA MERGE»** sin hallazgos.
+- Workflow manual #1: run `29854592038`, job `88715662743`, sobre `a44db3e`; 26 pruebas Python, 72 Node, entrenamiento y publicación en **success**.
+- Artefacto verificado: `20260721T175020Z-a44db3e34bc969fc02f31132bcb22bb538c7421d-gh29854592038-1`.
+- Una ejecución directa de `/.netlify/functions/predict` respondió HTTP 200 y ancló el snapshot a `2026-07-21T11:52:05-06:00`.
+- `/api/latest`: `stale: false`, forecast `fresh`, 48 puntos por activo. BTC: `down`, −3.1511 %, confianza 72.5 % (muestra 40). ETH: `down`, −3.4374 %, confianza 87.5 % (muestra 40).
+- Accuracy ausente por diseño hasta medirse contra `data/predictions_log.json`; la UI no presenta backtest ni expectativa como resultado real.
+- UI productiva verificada en desktop y 390 px: BTC/ETH, línea punteada, copy simple, «Datos al día», entrenamiento 11:50 CDMX, sin errores de consola ni overflow.
+- `/js/vendor/chart.umd.js` responde HTTP 200 con 206670 bytes y es byte-idéntico al bundle oficial 4.4.9; no hay referencia a jsDelivr.
+- Un único deploy productivo consumió 15 créditos; los commits posteriores solo-documentación fueron ignorados por Netlify.
+
+### Checklist de QA (2.6) — 2026-07-21
+
+- ✅ CI y tests: 72 Node + 26 Python; build, sintaxis, diff-check y `npm audit` verdes.
+- ✅ Móvil 390 px y desktop sin desbordamiento horizontal.
+- ✅ Modo oscuro fijo por diseño; el tema del sistema no aplica.
+- ✅ Estados cargando/fresco/stale/error y forecast `fresh/stale/unavailable` cubiertos por pruebas.
+- ✅ Disclaimers presentes; chat todavía no aplica.
+- ✅ Sin logs de debug ni claves en el cliente.
+- ✅ Números redondeados y horarios etiquetados en CDMX.
+- ✅ Lighthouse móvil remoto limpio: performance 98, accesibilidad 100.
+- ✅ Arquitectura, estado, bitácora y changelog actualizados.
+- ✅ QA-Guardian aprobó sin hallazgos y revisión externa completa.
+
+### Deuda no bloqueante
+
+- GitHub Actions advierte que actions v4 apuntan a Node 20 y las fuerza a Node 24. El run pasó; revisar el upgrade al preparar la Fase 3.
+
+### Siguiente
+
+Preparar la Fase 3: `predictions_log`, evaluación y accuracy real medida. No se muestra accuracy hasta contar con resultados reales suficientes.
+
 ## Fase 1 — Fundación · «la página viva» — CERRADA 2026-07-16
 
 **Entregable**: https://likelycoin.netlify.app — sitio público con precio de BTC/ETH actualizado cada 15 minutos, gráfica de 30 días auto-refrescada y pipeline de estado en Netlify Blobs. Costo de operación: $0.

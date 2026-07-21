@@ -2,22 +2,22 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 11:43 (hora CDMX)
+**Última actualización**: 2026-07-21 12:01 (hora CDMX)
 
-> ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
+> ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: FASE 2 — Modelo · «la línea punteada»
+## FASE 2 — Modelo · «la línea punteada» — CERRADA ✅
 
-**Rama actual**: `main` en `4a41cb7` (Fase 2 integrada por fast-forward estricto y desplegada en producción).
+**Rama actual**: `main` (código productivo de Fase 2 en `4a41cb7`; los commits posteriores solo-documentación fueron ignorados por Netlify sin deploy).
 
 | # | Paquete | Estado |
 |---|---|---|
 | 2.1 | Contrato `forecast-artifact/1.0` + snapshot anclado | ☑ Documentado antes del código |
 | 2.2 | `ml/features.py` + `ml/train.py` + Prophet + validación rolling-origin | ☑ Implementado y aprobado por QA; Prophet real verificado |
-| 2.3 | `train.yml` diario + publicador seguro a Netlify Blobs | ◐ Implementado y aprobado por QA; secrets confirmados, primera publicación real pendiente de ejecución manual |
+| 2.3 | `train.yml` diario + publicador seguro a Netlify Blobs | ☑ Primera ejecución real publicada y verificada en Netlify Blobs |
 | 2.4 | Lectura `latest → previous`, anclaje 48h en `predict.mjs` | ☑ Implementado y aprobado por QA; incluye fallback ante JSON malformado y seed explícito `unavailable` |
 | 2.5 | Línea punteada + dirección + confianza en UI | ☑ Implementado y aprobado por QA; desktop/390 px verificados |
-| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ◐ Confirmación final sin hallazgos y merge único completos; falta activar y verificar el primer forecast real antes de cerrar la fase |
+| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ☑ Checklist completo, Claude confirmó sin hallazgos y producción verificada |
 
 ### Validación de Fase 2
 
@@ -40,8 +40,15 @@
 - Front-UX y QA-Guardian aprobaron el cambio. En navegador local, desktop y 390 px muestran BTC/ETH, gráfica y pronóstico correctamente, sin overflow ni errores de consola.
 - Lighthouse móvil local: **performance 93, accesibilidad 100, Best Practices 100 y SEO 100**; FCP 1.0 s, LCP 3.2 s, TBT 10 ms y CLS 0.001. Lighthouse móvil remoto limpio: **performance 98, accesibilidad 100 y Best Practices 100**.
 - Producción ya sirve `/js/vendor/chart.umd.js` con HTTP 200 y **206670 bytes** desde el build integrado.
-- `/api/latest` conserva un snapshot fresco, pero todavía es legacy y no incluye `forecast`. La señal aparecerá después de ejecutar manualmente `Daily forecast training` y de que posteriormente corra `predict`.
-- El conector de GitHub no tiene permisos para Actions ni merge, y la autenticación local de `gh` es inválida. Antonio autorizó usar el navegador integrado, pero su sesión de GitHub está cerrada; la pestaña de acceso quedó abierta para handoff.
+- `Daily forecast training` #1 —run `29854592038`, job `88715662743`, sobre `main` en `a44db3e`— terminó en **success**: 26 pruebas Python, 72 Node, entrenamiento y publicación completos.
+- Artefacto publicado y leído de vuelta: `20260721T175020Z-a44db3e34bc969fc02f31132bcb22bb538c7421d-gh29854592038-1`.
+- Una única ejecución directa de `/.netlify/functions/predict` respondió HTTP 200 y ancló el forecast a `2026-07-21T11:52:05-06:00`.
+- `/api/latest` quedó con `stale: false` y `forecast.status: fresh`; BTC y ETH contienen 48 puntos cada uno. BTC: dirección `down`, cambio −3.1511 %, confianza 72.5 % con muestra 40. ETH: `down`, cambio −3.4374 %, confianza 87.5 % con muestra 40.
+- La accuracy permanece ausente, como exige el contrato: todavía no existe medición contra `data/predictions_log.json`.
+- UI productiva verificada en desktop y 390 px: BTC/ETH, línea punteada, copy simple, «Datos al día» y entrenamiento de las 11:50 CDMX; cero errores de consola y cero overflow.
+- QA-Guardian aprobó el cierre sin hallazgos. El bundle productivo es byte-idéntico a Chart.js 4.4.9 y no existe dependencia de jsDelivr.
+- Checklist de `docs/04_QA.md` completo: CI/tests, responsive, dark fijo (tema del sistema no aplica), estados cubiertos por tests, disclaimers, cero debug/keys, redondeo y CDMX, Lighthouse remoto limpio 98/100 y documentación al día.
+- **Warning no bloqueante:** GitHub Actions avisa que algunas actions v4 apuntan a Node 20 y las fuerza a Node 24. El run pasó; revisar el upgrade al preparar la Fase 3.
 
 ### FASE 1 — Fundación · «la página viva» — CERRADA
 
@@ -84,13 +91,14 @@ Los seeds del repo los copia el build a `public/data/`; el frontend pide el endp
 - **Cadena completa verificada en producción a las 18:22**: precio USD 63,840 de las 18:18, «−1.4 %» en rojo, «Datos al día», «Próxima lectura 06:33 p.m.» (= 18:18 + 15 min), y la gráfica sirviéndose de `/api/history` con 721 puntos frescos.
 - **El scheduler de Netlify llega tarde y a minutos variables** (:09, :05). Por eso «Próxima lectura» ya no se ancla a la frontera de reloj sino a `generated_at + 15 min`, y dice «En cualquier momento» si esa estimación pasa.
 - **Bug corregido en producción**: `change24h()` calculaba el % entre los dos últimos puntos del histórico (congelados) mientras el precio venía vivo del API → mostraba BTC en ▲ 0.0 % verde cuando realmente caía −1.16 %. Ahora ancla el % al precio mostrado y lo oculta si el histórico no cubre esa ventana ±2h. El arreglo quedó absorbido dentro del commit `3d42b6b` del rediseño.
-- **Fase 2 desplegada en `4a41cb7`**: `/js/vendor/chart.umd.js` responde HTTP 200 con 206670 bytes. `/api/latest` sigue fresco, pero aún sin forecast hasta ejecutar `Daily forecast training` y después `predict`.
+- **Fase 2 operativa en producción**: `/js/vendor/chart.umd.js` responde HTTP 200 con 206670 bytes; el forecast real está fresco y anclado desde las 11:52:05 CDMX, con 48 puntos para BTC y ETH.
+- La fase consumió un único deploy productivo de **15 créditos**. Los commits posteriores que solo actualizaron documentación fueron ignorados por Netlify y no generaron deploy.
 
 ## Hueco del histórico congelado: RESUELTO
 
 El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ventana de 30 días en Blobs cada 6h y `GET /api/history?asset=` la sirve; `data/history/` quedó como seed de fallback. Se descartó la opción del Action diario que commitea: **habría costado 450 créditos/mes contra un presupuesto de 300** (ver `06_PRESUPUESTO.md`).
 
-**Implicación pendiente para Fase 2**: el diseño original decía commitear `models/model_YYYYMMDD.json` a diario. Eso tampoco cabe en el presupuesto. `train.yml` deberá escribir el artefacto a Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` sin tocar el repo.
+**Decisión aplicada en Fase 2**: el diseño original decía commitear `models/model_YYYYMMDD.json` a diario. Eso no cabe en el presupuesto; `train.yml` escribe el artefacto a Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` sin tocar el repo.
 
 ## Reparto de la Fase 2 (decidido por Antonio, 2026-07-16)
 
@@ -100,7 +108,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Antonio inicia sesión en GitHub desde la pestaña visible del navegador integrado y responde «listo». Codex pulsa **Run workflow** en `Daily forecast training`; después se espera `predict` para anclar y exponer el forecast.
+➡️ Preparar la Fase 3 —`predictions_log`, evaluación y accuracy real medida— sin implementarla hasta documentar su alcance y completar su apertura formal.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 
