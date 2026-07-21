@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 11:11 (hora CDMX)
+**Última actualización**: 2026-07-21 11:22 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~17 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
@@ -17,7 +17,7 @@
 | 2.3 | `train.yml` diario + publicador seguro a Netlify Blobs | ☑ Implementado y aprobado por QA; secrets confirmados, publicación real pendiente del merge |
 | 2.4 | Lectura `latest → previous`, anclaje 48h en `predict.mjs` | ☑ Implementado y aprobado por QA; incluye fallback ante JSON malformado y seed explícito `unavailable` |
 | 2.5 | Línea punteada + dirección + confianza en UI | ☑ Implementado y aprobado por QA; desktop/390 px verificados |
-| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ◐ Claude aprobó; las cinco observaciones menores quedaron resueltas localmente, pero faltan validación remota, confirmación breve y merge |
+| 2.6 | QA completo + revisión externa de Claude + merge batched a `main` | ◐ Claude aprobó la primera revisión; sus cinco observaciones menores ya están resueltas y validadas local/remotamente. Solo faltan su confirmación breve y el merge único |
 
 ### Validación de Fase 2
 
@@ -28,15 +28,16 @@
 - Se eliminó el último motivo circular del panel predictivo; la señal usa una identidad lineal sobria, sin esfera ni emojis.
 - El estado sin forecast conserva precio/gráfica real y dice explícitamente «Sin señal disponible» / «Sin medición».
 - GitHub Actions reconoce `NETLIFY_AUTH_TOKEN` y `NETLIFY_SITE_ID` como repository secrets; sus valores permanecen ocultos.
-- PR en borrador: `#1 Add Phase 2 forecast pipeline and dashboard`. CI y Netlify Deploy Preview verdes.
+- PR en borrador: `#1 Add Phase 2 forecast pipeline and dashboard`. CI y Netlify Deploy Preview verdes en `9f01ea0`.
 - Deploy Preview: `https://deploy-preview-1--likelycoin.netlify.app` (gratis; producción intacta).
-- Lighthouse del Deploy Preview después de cargar Chart.js en segundo plano y agregar favicon: **desktop 99 performance / 100 accesibilidad**; móvil 81 / 100, CLS 0 y cero errores de consola. El umbral formal del checklist (≥85 / ≥90) queda aprobado en desktop; el score móvil se conserva como riesgo de mejora, no se oculta.
-- SEO 60 y Best Practices 96 en el preview: el SEO queda degradado por el `noindex` y la herramienta colaborativa que Netlify inyecta únicamente en Deploy Previews; producción de Fase 1 midió SEO 100.
+- La URL colaborativa del Deploy Preview obtuvo **78 performance móvil** después del cambio. Esa superficie inyectó Netlify Drawer —incluidos tres videos y scripts ajenos al build— y elevó la transferencia a 1.72 MiB; el resultado se conserva y no se atribuye al sitio.
+- El permalink inmutable del mismo deploy `6a5fa9eceab5c90008c48303` —misma compilación, sin Drawer— obtuvo **98 performance, 100 accesibilidad y 100 Best Practices** en Lighthouse móvil remoto: FCP 0.8 s, LCP 1.5 s, TBT 70 ms, CLS 0 y 103 KiB transferidos. Con ello M1 supera el umbral formal de performance ≥85.
+- SEO queda en 60 únicamente en las superficies de preview por el encabezado `x-robots-tag: noindex`; producción de Fase 1 midió SEO 100.
 - Claude emitió **«APROBACIÓN EXTERNA FASE 2: APTA PARA MERGE»** sobre `8f388fd`, sin bloqueantes ni hallazgos mayores.
-- Las cinco observaciones menores de Claude quedaron resueltas localmente: publicador y runtime comparten un único validador; el anclaje fallido deja warning controlado; CI incluye las 26 pruebas Python; se eliminó `requests` sin uso; y M1 quedó cerrado en QA local con Chart.js servido por el propio build.
-- **M1 resuelto localmente:** `chart.js` está fijado exactamente en `4.4.9`; el build copia su bundle oficial `dist/chart.umd.js` a `public/js/vendor/chart.umd.js`; la carga sigue siendo dinámica, ya no depende del CDN y conserva el fallback si Chart.js no está disponible.
+- Las cinco observaciones menores de Claude quedaron resueltas: publicador y runtime comparten un único validador; el anclaje fallido deja warning controlado; CI incluye las 26 pruebas Python; se eliminó `requests` sin uso; y M1 quedó cerrado con Chart.js servido por el propio build.
+- **M1 resuelto local y remotamente:** `chart.js` está fijado exactamente en `4.4.9`; el build copia su bundle oficial `dist/chart.umd.js` a `public/js/vendor/chart.umd.js`; la carga sigue siendo dinámica, ya no depende del CDN y conserva el fallback si Chart.js no está disponible.
 - Front-UX y QA-Guardian aprobaron el cambio. En navegador local, desktop y 390 px muestran BTC/ETH, gráfica y pronóstico correctamente, sin overflow ni errores de consola.
-- Lighthouse móvil local: **performance 93, accesibilidad 100, Best Practices 100 y SEO 100**; FCP 1.0 s, LCP 3.2 s, TBT 10 ms y CLS 0.001. Falta repetir esta medición sobre el Deploy Preview; no se atribuye todavía al entorno remoto.
+- Lighthouse móvil local: **performance 93, accesibilidad 100, Best Practices 100 y SEO 100**; FCP 1.0 s, LCP 3.2 s, TBT 10 ms y CLS 0.001. Lighthouse móvil remoto limpio: **performance 98, accesibilidad 100 y Best Practices 100**.
 
 ### FASE 1 — Fundación · «la página viva» — CERRADA
 
@@ -94,7 +95,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Hacer un commit y push batched a `feature/phase-2-model`, esperar CI y Deploy Preview gratuitos, repetir Lighthouse móvil sobre ese preview y pedir a Claude una confirmación breve antes del merge.
+➡️ Pedir a Claude una confirmación breve sobre `a6a12bb..9f01ea0`. Si no reporta bloqueantes, hacer un único merge de la PR #1 a `main` y después ejecutar manualmente `Daily forecast training` para verificar la primera publicación real a Netlify Blobs.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 
