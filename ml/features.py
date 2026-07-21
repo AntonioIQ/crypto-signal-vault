@@ -60,13 +60,13 @@ def _require_exact_fields(
     return value
 
 
-def validate_history_document(document: Any, expected_asset: str) -> list[PricePoint]:
-    """Validate a history document and return a contiguous hourly price series.
+def normalized_hourly_series(document: Any, expected_asset: str) -> list[PricePoint]:
+    """Validate a history document and return the FULL hourly series.
 
-    CoinGecko can include more than one observation inside the current UTC hour.
-    Those observations are collapsed to the last value in that hour. No price is
-    interpolated or backfilled. Only the newest contiguous hourly suffix is
-    returned, which keeps rolling-origin folds from crossing an older gap.
+    CoinGecko can include more than one observation inside the current UTC hour;
+    those are collapsed to the last value in that hour. No price is interpolated
+    or backfilled, and no trimming is applied — real gaps stay visible, so this
+    is the series health checks must run on.
     """
 
     if expected_asset not in SUPPORTED_ASSETS:
@@ -140,29 +140,56 @@ def validate_history_document(document: Any, expected_asset: str) -> list[PriceP
         else:
             hourly.append(PricePoint(timestamp=bucket, price=price))
 
+    return hourly
+
+
+def contiguous_suffix(hourly: Sequence[PricePoint]) -> list[PricePoint]:
+    """Return only the newest run of contiguous hourly points.
+
+    Training and rolling-origin validation must not step across a gap, so they
+    use this suffix. Health and resolution use the full series instead.
+    """
+
+    if not hourly:
+        return []
     suffix_start = len(hourly) - 1
     while suffix_start > 0:
         if hourly[suffix_start].timestamp - hourly[suffix_start - 1].timestamp != timedelta(hours=1):
             break
         suffix_start -= 1
-    return hourly[suffix_start:]
+    return list(hourly[suffix_start:])
 
 
-def load_history(path: str | Path, expected_asset: str) -> list[PricePoint]:
-    """Load and validate a versioned history JSON document from local disk."""
+def validate_history_document(document: Any, expected_asset: str) -> list[PricePoint]:
+    """Full normalized series trimmed to its newest contiguous hourly suffix."""
 
+    return contiguous_suffix(normalized_hourly_series(document, expected_asset))
+
+
+def _read_document(path: str | Path) -> Any:
     history_path = Path(path)
     try:
         raw = history_path.read_text(encoding="utf-8")
     except OSError as exc:
         raise HistoryValidationError(f"cannot read history file {history_path}: {exc}") from exc
     try:
-        document = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError as exc:
         raise HistoryValidationError(
             f"history file {history_path} is not valid JSON: {exc.msg}"
         ) from exc
-    return validate_history_document(document, expected_asset)
+
+
+def load_history(path: str | Path, expected_asset: str) -> list[PricePoint]:
+    """Load a history file as the contiguous hourly suffix (for training)."""
+
+    return validate_history_document(_read_document(path), expected_asset)
+
+
+def load_history_full(path: str | Path, expected_asset: str) -> list[PricePoint]:
+    """Load a history file as the full normalized series (for evaluation/health)."""
+
+    return normalized_hourly_series(_read_document(path), expected_asset)
 
 
 def terminal_return(reference_price: float, terminal_price: float) -> float:

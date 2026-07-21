@@ -79,4 +79,5 @@ jobs:
           node scripts/publish-evaluation.mjs publish \
             "${RUNNER_TEMP}/out/log-current.json" \
             "${RUNNER_TEMP}/out/accuracy.json" \
-            "${RUNNER_TEMP}/out/health.json"
+            "${RUNNER_TEMP}/out/health.json" \
+            "${RUNNER_TEMP}/log-current.json"

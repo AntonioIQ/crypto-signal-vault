@@ -47,12 +47,42 @@ function anchoredSnapshot(now = w(Date.now())) {
   return createFreshSnapshot(prices, new Date(now), forecast);
 }
 
-function fakeStore(seed = {}, { failReads = false, failWrites = false } = {}) {
-  const blobs = new Map(Object.entries(seed));
+// Etag-simulating fake: setJSON honours onlyIfNew / onlyIfMatch and returns
+// { modified: false } on a conflict, so the compare-and-swap path is exercised.
+function fakeStore(seed = {}, { failReads = false, failWrites = false, onFirstRead = null } = {}) {
+  const blobs = new Map();
+  let nextEtag = 1;
+  for (const [key, value] of Object.entries(seed)) {
+    blobs.set(key, { value, etag: String(nextEtag++) });
+  }
+  let firstReadDone = false;
   return {
     blobs, writes: 0,
-    async get(key) { if (failReads) throw new Error('down'); return blobs.get(key) ?? null; },
-    async setJSON(key, value) { if (failWrites) throw new Error('down'); this.writes += 1; blobs.set(key, value); },
+    async get(key) {
+      if (failReads) throw new Error('down');
+      return blobs.get(key)?.value ?? null;
+    },
+    async getWithMetadata(key) {
+      if (failReads) throw new Error('down');
+      const entry = blobs.get(key);
+      const result = entry ? { data: entry.value, etag: entry.etag } : null;
+      if (!firstReadDone && onFirstRead) {
+        firstReadDone = true;
+        onFirstRead(blobs, () => String(nextEtag++)); // simulate a concurrent writer
+      }
+      return result;
+    },
+    async setJSON(key, value, options = {}) {
+      if (failWrites) throw new Error('down');
+      const entry = blobs.get(key);
+      if (options.onlyIfNew && entry) return { modified: false };
+      if (options.onlyIfMatch && (!entry || entry.etag !== options.onlyIfMatch)) {
+        return { modified: false };
+      }
+      this.writes += 1;
+      blobs.set(key, { value, etag: String(nextEtag++) });
+      return { modified: true };
+    },
   };
 }
 
@@ -61,7 +91,27 @@ test('recordPredictions appends two records on first run and writes once', async
   const added = await recordPredictions(store, anchoredSnapshot());
   assert.equal(added, 2);
   assert.equal(store.writes, 1);
-  assert.equal(store.blobs.get(LOG_CURRENT_KEY).length, 2);
+  assert.equal(store.blobs.get(LOG_CURRENT_KEY).value.length, 2);
+});
+
+test('a concurrent write between read and write is retried, not lost', async () => {
+  const snapshot = anchoredSnapshot();
+  // Between recordPredictions' read and its write, another writer adds an
+  // unrelated record and bumps the etag, so the first CAS write conflicts.
+  const store = fakeStore({}, {
+    onFirstRead: (blobs, nextEtag) => {
+      blobs.set(LOG_CURRENT_KEY, {
+        value: [{ id: 'other:2020-01-01T00:00:00Z:48' }],
+        etag: nextEtag(),
+      });
+    },
+  });
+  const added = await recordPredictions(store, snapshot);
+  assert.equal(added, 2);
+  const finalLog = store.blobs.get(LOG_CURRENT_KEY).value;
+  const ids = finalLog.map((r) => r.id);
+  assert.ok(ids.includes('other:2020-01-01T00:00:00Z:48'), 'the concurrent record survives');
+  assert.equal(finalLog.filter((r) => r.asset === 'btc' || r.asset === 'eth').length, 2);
 });
 
 test('recordPredictions is idempotent within the same hour (no second write)', async () => {

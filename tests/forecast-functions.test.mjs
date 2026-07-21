@@ -362,6 +362,30 @@ test("model store outage never breaks fresh market prices", async () => {
   ]);
 });
 
+test("predictions store factory failure never breaks fresh market prices", async () => {
+  const marketStore = makeMarketStore();
+  const warnings = [];
+
+  const { status, snapshot } = await runPrediction({
+    getStoreFn: (name) => {
+      if (name === PREDICTIONS_STORE) throw new Error("predictions store down");
+      return marketStore;
+    },
+    fetchPrices: async () => SAMPLE_PRICES,
+    clock: () => new Date("2026-07-17T02:15:00-06:00"),
+    logger: { warn: (message) => warnings.push(message) },
+  });
+
+  assert.equal(status, "fresh");
+  assert.equal(snapshot.stale, false);
+  assert.equal(snapshot.assets.btc.price, SAMPLE_PRICES.btc.price);
+  assert.deepEqual(snapshot.accuracy, { status: "unavailable" });
+  assert.ok(
+    warnings.includes("Accuracy read skipped; fresh market data remains available."),
+    "a store-factory failure is warned, not fatal",
+  );
+});
+
 test("CoinGecko failure preserves anchor and points while forecast ages", async () => {
   const artifact = artifactFixture();
   const anchoredAt = new Date("2026-07-17T02:15:00-06:00");

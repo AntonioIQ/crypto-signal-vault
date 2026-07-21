@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
-    from .features import HistoryValidationError, load_history
+    from .features import HistoryValidationError, load_history_full
 except ImportError:  # pragma: no cover - used when invoked as `python ml/evaluate.py`
-    from features import HistoryValidationError, load_history  # type: ignore
+    from features import HistoryValidationError, load_history_full  # type: ignore
 
 
 SUPPORTED_ASSETS = ("btc", "eth")
@@ -37,7 +37,8 @@ RESOLUTION_GRACE = timedelta(hours=24)
 LOG_RETENTION = timedelta(days=30)
 TIMEZONE_NAME = "America/Mexico_City"
 GAP_LOOKBACK = timedelta(hours=24)
-GAP_THRESHOLD = timedelta(hours=2)
+# Hourly data: any spacing beyond one hour means at least one missing hour.
+GAP_THRESHOLD = timedelta(hours=1)
 
 
 class EvaluationError(RuntimeError):
@@ -288,7 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not isinstance(raw_log, list):
             raise EvaluationError("predictions log must be a JSON array")
         histories = {
-            asset: load_history(args.history_dir / f"{asset}.json", asset)
+            asset: load_history_full(args.history_dir / f"{asset}.json", asset)
             for asset in SUPPORTED_ASSETS
         }
         now = args.now or datetime.now(timezone.utc)

@@ -1,3 +1,7 @@
+// Mirrors MIN_ACCURACY_SAMPLES in netlify/lib/prediction-contract.mjs; kept as
+// a local constant so this browser module has no Node-side imports.
+const MIN_ACCURACY_SAMPLES = 20;
+
 const DIRECTION_COPY = {
   up: {
     label: "Probablemente suba",
@@ -113,10 +117,14 @@ export function accuracyView(snapshot, asset) {
   const item = accuracy.assets?.[asset];
   if (!item) return blank;
 
+  // Defense in depth: even if a block claims `available`, never show a
+  // percentage without the measured minimum of resolved predictions.
   if (
     item.status === "available" &&
     typeof item.hit_rate === "number" &&
-    Number.isFinite(item.hit_rate)
+    Number.isFinite(item.hit_rate) &&
+    Number.isInteger(item.sample_size) &&
+    item.sample_size >= MIN_ACCURACY_SAMPLES
   ) {
     return {
       available: true,

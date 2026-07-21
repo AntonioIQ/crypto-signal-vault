@@ -72,6 +72,12 @@ export function assertValidPredictionRecord(record) {
   assert(isPositiveNumber(item.anchor_price), "prediction.anchor_price must be positive.");
   assert(isPositiveNumber(item.predicted), "prediction.predicted must be positive.");
   assert(DIRECTIONS.includes(item.direction), "prediction.direction is invalid.");
+  // The recorded direction must be the one implied by the predicted move, so a
+  // mislabelled prediction can never be published as valid.
+  assert(
+    item.direction === directionFor(item.predicted / item.anchor_price - 1),
+    "prediction.direction does not match predicted vs anchor.",
+  );
 
   const madeAt = parseMexicoCityTimestamp(item.made_at, "prediction.made_at", PredictionContractError);
   const targetAt = parseMexicoCityTimestamp(item.target_at, "prediction.target_at", PredictionContractError);
@@ -95,12 +101,18 @@ export function assertValidPredictionRecord(record) {
   }
 
   const resolvedAt = parseMexicoCityTimestamp(item.resolved_at, "prediction.resolved_at", PredictionContractError);
-  assert(resolvedAt >= madeAt, "prediction.resolved_at cannot precede made_at.");
+  // A prediction cannot be resolved before its own target time has arrived.
+  assert(resolvedAt >= targetAt, "prediction.resolved_at cannot precede target_at.");
   if (item.actual === null) {
     assert(item.hit === null, "a prediction resolved without data must have null hit.");
   } else {
     assert(isPositiveNumber(item.actual), "prediction.actual must be positive when present.");
     assert(typeof item.hit === "boolean", "prediction.hit must be boolean when actual is present.");
+    // hit must be the truth: did the real move land in the predicted direction?
+    assert(
+      item.hit === (directionFor(item.actual / item.anchor_price - 1) === item.direction),
+      "prediction.hit does not match the real move against anchor.",
+    );
   }
   return item;
 }
@@ -173,9 +185,20 @@ function validateAccuracyAsset(value, label) {
     Number.isInteger(item.sample_size) && item.sample_size >= 0,
     `${label}.sample_size must be a non-negative integer.`,
   );
+  // The sample threshold is part of the contract, not just a producer
+  // convention: a percentage may only ride on `available` with enough
+  // resolved samples, so a hand-built block can never leak a fake number.
   if (item.status === "available") {
+    assert(
+      item.sample_size >= MIN_ACCURACY_SAMPLES,
+      `${label} cannot be available below ${MIN_ACCURACY_SAMPLES} samples.`,
+    );
     assert(isOneDecimalPercent(item.hit_rate), `${label}.hit_rate must be a one-decimal percent.`);
   } else if (item.status === "insufficient_data") {
+    assert(
+      item.sample_size < MIN_ACCURACY_SAMPLES,
+      `${label} with ${MIN_ACCURACY_SAMPLES}+ samples must be available.`,
+    );
     assert(item.hit_rate === null, `${label}.hit_rate must be null without enough samples.`);
   } else {
     throw new PredictionContractError(`${label}.status is invalid.`);
@@ -199,8 +222,8 @@ export function assertValidAccuracy(accuracy) {
   );
   assert(document.status === "available", "accuracy.status is invalid.");
   assert(
-    Number.isInteger(document.window_days) && document.window_days > 0,
-    "accuracy.window_days must be a positive integer.",
+    document.window_days === ACCURACY_WINDOW_DAYS,
+    `accuracy.window_days must be ${ACCURACY_WINDOW_DAYS}.`,
   );
   parseMexicoCityTimestamp(document.measured_through, "accuracy.measured_through", PredictionContractError);
   requireExactObject(document.assets, ["btc", "eth"], "accuracy.assets", PredictionContractError);

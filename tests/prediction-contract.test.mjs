@@ -135,6 +135,29 @@ test('unknown fields and wrong horizon are rejected', () => {
   assert.throws(() => assertValidPredictionRecord({ ...btc, horizon_h: 24 }));
 });
 
+test('the contract enforces semantic truth, not just shape', () => {
+  const [btc] = buildPredictionRecords(anchoredSnapshot()); // direction up, anchor 64000
+  const afterTarget = formatMexicoCityTimestamp(new Date(Date.parse(btc.target_at) + HOUR));
+  const beforeTarget = formatMexicoCityTimestamp(new Date(Date.parse(btc.target_at) - HOUR));
+
+  // direction must match predicted vs anchor: labelling an up move "down" fails
+  assert.throws(() => assertValidPredictionRecord({ ...btc, direction: 'down' }));
+
+  // hit must be the truth: up predicted, real price BELOW anchor is not a hit
+  assert.throws(() =>
+    assertValidPredictionRecord({ ...btc, actual: 60000, resolved_at: afterTarget, hit: true }),
+  );
+  // ...and the honest version passes
+  assert.doesNotThrow(() =>
+    assertValidPredictionRecord({ ...btc, actual: 60000, resolved_at: afterTarget, hit: false }),
+  );
+
+  // a prediction cannot be resolved before its target time has arrived
+  assert.throws(() =>
+    assertValidPredictionRecord({ ...btc, actual: 66000, resolved_at: beforeTarget, hit: true }),
+  );
+});
+
 test('accuracy block: available requires one-decimal percents and matching status', () => {
   const good = {
     status: 'available',
@@ -145,12 +168,32 @@ test('accuracy block: available requires one-decimal percents and matching statu
       eth: { status: 'insufficient_data', hit_rate: null, sample_size: 11 },
     },
   };
+  const withBtc = (btc) => ({ ...good, assets: { ...good.assets, btc } });
   assert.doesNotThrow(() => assertValidAccuracy(good));
   assert.ok(isValidAccuracy(unavailableAccuracy()));
   // hit_rate with two decimals is rejected
-  assert.equal(isValidAccuracy({ ...good, assets: { ...good.assets, btc: { status: 'available', hit_rate: 58.33, sample_size: 96 } } }), false);
+  assert.equal(isValidAccuracy(withBtc({ status: 'available', hit_rate: 58.33, sample_size: 96 })), false);
   // available status with null hit_rate is rejected
-  assert.equal(isValidAccuracy({ ...good, assets: { ...good.assets, btc: { status: 'available', hit_rate: null, sample_size: 96 } } }), false);
+  assert.equal(isValidAccuracy(withBtc({ status: 'available', hit_rate: null, sample_size: 96 })), false);
   // insufficient_data must carry a null hit_rate
   assert.equal(isValidAccuracy({ ...good, assets: { ...good.assets, eth: { status: 'insufficient_data', hit_rate: 40.0, sample_size: 11 } } }), false);
+});
+
+test('accuracy block: the 20-sample threshold and 7-day window are enforced', () => {
+  const measured_through = formatMexicoCityTimestamp(new Date());
+  const build = (btc, window_days = 7) => ({
+    status: 'available',
+    window_days,
+    measured_through,
+    assets: { btc, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 0 } },
+  });
+  // 20 samples: available is allowed
+  assert.ok(isValidAccuracy(build({ status: 'available', hit_rate: 50.0, sample_size: 20 })));
+  // 19 samples cannot be available (this is the regression Codex reproduced)
+  assert.equal(isValidAccuracy(build({ status: 'available', hit_rate: 77.7, sample_size: 19 })), false);
+  assert.equal(isValidAccuracy(build({ status: 'available', hit_rate: 77.7, sample_size: 1 })), false);
+  // 20+ samples cannot be insufficient_data
+  assert.equal(isValidAccuracy(build({ status: 'insufficient_data', hit_rate: null, sample_size: 25 })), false);
+  // window must be exactly 7 days
+  assert.equal(isValidAccuracy(build({ status: 'available', hit_rate: 50.0, sample_size: 96 }, 30)), false);
 });

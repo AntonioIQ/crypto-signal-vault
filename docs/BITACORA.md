@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-07-21 — Fase 3: correcciones de la revisión de Codex
+
+Codex revisó la PR #2 y encontró 1 bloqueante, 4 mayores y 1 menor — una revisión buena, casi todo real. Corregidos los seis:
+
+- **Bloqueante (pérdida de predicciones por concurrencia):** `predict.mjs` y el `evaluate` diario hacían read-modify-write del log completo sin control de concurrencia; si `predict` agregaba entre la descarga y la publicación, el republish del día lo perdía. Añadí `netlify/lib/blob-log.mjs` con compare-and-swap por ETag y reintento; el recorder lo usa, y el publicador además hace merge con el baseline descargado para conservar cualquier append concurrente. Prueba de concurrencia real.
+- **Mayor (accuracy sin umbral):** el contrato aceptaba `available` con 1 muestra. Ahora impone ≥20 para `available`, <20 para `insufficient_data`, y `window_days===7`; la UI repite el guard.
+- **Mayor (verdad semántica del registro):** el validador solo miraba forma. Ahora recalcula `direction` desde `predicted/anchor`, verifica `hit` contra el precio real, y exige `resolved_at ≥ target_at`.
+- **Mayor (store predictions no aislado):** `getStoreFn(PREDICTIONS_STORE)` estaba en el try general de ingesta; un fallo del factory devolvía stale con precio null. Movido a su propio try.
+- **Mayor (health no detectaba huecos):** `data_health` corría sobre el sufijo contiguo (sin huecos por construcción). Separé `normalized_hourly_series` (completa) de `contiguous_suffix`; evaluate usa la completa para resolución y health, y cuenta separaciones > 1 h.
+- **Menor (rotación inexistente):** la doc prometía `log/archive/` nunca implementado. Ajusté §2.4 a la retención real (poda 30 d) y a «por activo».
+
+**Verificación:** 94 Node + 39 Python verdes; build, audit, diff limpios; e2e Python→JS revalidado con el contrato endurecido (25 predicciones, todas pasan las nuevas verificaciones semánticas). Sin merge ni deploy.
+
+**Pendiente:** re-revisión de Codex, merge único, primera corrida real de `evaluate.yml`.
+
+---
+
 ## 2026-07-21 — FASE 3 construida por Claude (pendiente revisión de Codex)
 
 **Reparto invertido:** esta fase la construye Claude y la revisa Codex, para que quien construye no sea quien cierra.

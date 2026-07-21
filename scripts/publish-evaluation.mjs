@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { getStore } from '@netlify/blobs';
 
+import { updateJsonWithRetry } from '../netlify/lib/blob-log.mjs';
 import {
   ACCURACY_KEY,
   HEALTH_KEY,
@@ -30,10 +31,10 @@ export function createPredictionsStore({
 
 // Downloads the current predictions log to a local file for evaluate.py. A
 // missing blob yields an empty array so the first-ever run is not an error.
-export async function downloadLog({ store, outPath }) {
+export async function downloadLog({ store, outPath, writeFileFn = writeFile }) {
   const raw = await store.get(LOG_CURRENT_KEY, { consistency: 'strong', type: 'json' });
   const log = Array.isArray(raw) ? raw : [];
-  await writeFile(outPath, JSON.stringify(log), 'utf8');
+  await writeFileFn(outPath, JSON.stringify(log), 'utf8');
   return log.length;
 }
 
@@ -67,16 +68,45 @@ function readJson(text, field) {
 // Publishes the evaluation outputs. Accuracy is validated against the public
 // contract and the log against the record contract before any write, so a
 // malformed evaluation never overwrites good blobs.
-export async function publishEvaluation({ store, logPath, accuracyPath, healthPath, readFileFn = readFile }) {
-  const log = validateResolvedLog(readJson(await readFileFn(logPath, 'utf8'), 'log'));
+//
+// The log is written under compare-and-swap and merged with the live blob: the
+// resolved log is authoritative for every id evaluate saw (including prunes),
+// and any prediction predict.mjs appended *after* the baseline was fetched is
+// carried forward, so the daily republish cannot drop a concurrent append.
+export async function publishEvaluation({
+  store,
+  logPath,
+  accuracyPath,
+  healthPath,
+  baselinePath,
+  readFileFn = readFile,
+}) {
+  const resolved = validateResolvedLog(readJson(await readFileFn(logPath, 'utf8'), 'log'));
   const accuracy = assertValidAccuracy(readJson(await readFileFn(accuracyPath, 'utf8'), 'accuracy'));
-  const healthText = await readFileFn(healthPath, 'utf8');
-  const health = readJson(healthText, 'health'); // shape owned by evaluate.py; stored verbatim
+  const health = readJson(await readFileFn(healthPath, 'utf8'), 'health'); // shape owned by evaluate.py
 
-  await store.setJSON(LOG_CURRENT_KEY, log);
+  const baselineRaw = baselinePath ? readJson(await readFileFn(baselinePath, 'utf8'), 'baseline') : [];
+  const baselineIds = new Set((Array.isArray(baselineRaw) ? baselineRaw : []).map((r) => r?.id));
+  const resolvedIds = new Set(resolved.map((r) => r.id));
+
+  await updateJsonWithRetry(store, LOG_CURRENT_KEY, (current) => {
+    const live = Array.isArray(current) ? current : [];
+    // Anything in the live blob that evaluate never saw (id not in the fetched
+    // baseline) and did not already resolve is a concurrent append: keep it.
+    const appended = live.filter((r) => !baselineIds.has(r?.id) && !resolvedIds.has(r?.id));
+    appended.forEach((record) => {
+      try {
+        assertValidPredictionRecord(record);
+      } catch (error) {
+        throw new EvaluationPublicationError(`concurrent log record is invalid: ${error.message}`);
+      }
+    });
+    return [...resolved, ...appended];
+  });
+
   await store.setJSON(ACCURACY_KEY, accuracy);
   await store.setJSON(HEALTH_KEY, health);
-  return { resolved: log.length, accuracyStatus: accuracy.status };
+  return { resolved: resolved.length, accuracyStatus: accuracy.status };
 }
 
 export async function main(argv = process.argv.slice(2)) {
@@ -91,11 +121,11 @@ export async function main(argv = process.argv.slice(2)) {
     return;
   }
   if (mode === 'publish') {
-    const [logPath, accuracyPath, healthPath] = rest;
+    const [logPath, accuracyPath, healthPath, baselinePath] = rest;
     if (!logPath || !accuracyPath || !healthPath) {
       throw new EvaluationPublicationError('publish requires log, accuracy and health paths');
     }
-    const result = await publishEvaluation({ store, logPath, accuracyPath, healthPath });
+    const result = await publishEvaluation({ store, logPath, accuracyPath, healthPath, baselinePath });
     console.log(`published evaluation: ${result.resolved} predictions, accuracy ${result.accuracyStatus}`);
     return;
   }

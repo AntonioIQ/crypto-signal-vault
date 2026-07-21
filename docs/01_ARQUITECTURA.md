@@ -405,8 +405,7 @@ commiteado queda descartado por esa razón. Store dedicado `predictions`:
 
 | Key | Qué | Quién escribe |
 |---|---|---|
-| `log/current.json` | Registro append-only del mes en curso | `predict.mjs` (registra) y `evaluate` (resuelve) |
-| `log/archive/<YYYY-MM>.json` | Meses cerrados (rotación mensual) | `evaluate` |
+| `log/current.json` | Registro append-only; se poda a 30 días para acotarlo | `predict.mjs` (registra) y `evaluate` (resuelve + poda) |
 | `metrics/accuracy.json` | Accuracy rolling de 7 días ya calculada | `evaluate` |
 | `metrics/health.json` | Huecos de datos y señales de drift | `evaluate` |
 
@@ -451,8 +450,11 @@ registro sin resolver cuyo `target_at` ya pasó busca el precio real más cercan
 Un registro sin dato real tras 24 h de gracia se marca resuelto con
 `hit: null` (no computa) para no quedar pendiente para siempre. La accuracy de
 7 días es `aciertos / resueltos` sobre los registros con `resolved_at` en los
-últimos 7 días y `hit` no nulo, por activo y global; con menos de un mínimo de
-muestras resueltas el estado es `insufficient_data` y no se publica porcentaje.
+últimos 7 días y `hit` no nulo, **por activo**; con menos de **20** muestras
+resueltas el estado es `insufficient_data` y no se publica porcentaje. La
+resolución y el `health` usan la **serie horaria completa** (no el sufijo
+contiguo de entrenamiento), de modo que los huecos reales siguen siendo
+visibles: `health` cuenta cualquier separación mayor a 1 h en las últimas 24 h.
 No se commitea nada: `evaluate.yml` escribe a Blobs con `NETLIFY_AUTH_TOKEN` +
 `NETLIFY_SITE_ID`, igual que `train.yml`.
 
@@ -517,6 +519,7 @@ crypto-signal-vault/
 │   └── chat.mjs                  # on-demand, Groq + rate limit
 ├── netlify/lib/                  # contratos y helpers compartidos (validación)
 │   ├── contract-helpers.mjs      # primitivas de validación comunes
+│   ├── blob-log.mjs              # compare-and-swap por ETag para el log
 │   ├── market-contract.mjs       # snapshot: forecast + accuracy opcionales
 │   ├── forecast-contract.mjs     # artefacto forecast-artifact/1.0
 │   ├── prediction-contract.mjs   # registro prediction-log/1.0 + accuracy
