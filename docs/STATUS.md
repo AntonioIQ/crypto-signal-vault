@@ -95,7 +95,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ Pedir a Claude una confirmación breve sobre `a6a12bb..9f01ea0`. Si no reporta bloqueantes, hacer un único merge de la PR #1 a `main` y después ejecutar manualmente `Daily forecast training` para verificar la primera publicación real a Netlify Blobs.
+➡️ Pedir a Claude una confirmación breve sobre `8f388fd..9f01ea0`. Si no reporta bloqueantes, hacer un único merge de la PR #1 a `main` y después ejecutar manualmente `Daily forecast training` para verificar la primera publicación real a Netlify Blobs.
 
 **Restricción de diseño ya decidida para la Fase 2**: el artefacto del modelo NO se commitea al repo (cada commit = deploy de 15 créditos). `train.yml` lo escribe a Netlify Blobs con `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` como secrets de GitHub. Ver `06_PRESUPUESTO.md` §4.
 

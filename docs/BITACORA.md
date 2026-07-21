@@ -10,7 +10,7 @@
 
 **Medición transparente:** Lighthouse móvil sobre la URL colaborativa del preview marcó 78 performance y 1.72 MiB transferidos. El desglose mostró que Netlify Drawer inyectó tres videos y varios scripts ajenos al build. Se repitió la prueba sobre el permalink inmutable del mismo deploy `6a5fa9eceab5c90008c48303`, superficie que [no admite el Drawer](https://docs.netlify.com/deploy/review-deploys/netlify-drawer-for-feedback/troubleshoot-the-netlify-drawer/): **98 performance, 100 accesibilidad, 100 Best Practices**, FCP 0.8 s, LCP 1.5 s, TBT 70 ms, CLS 0 y solo 103 KiB transferidos. El SEO 60 corresponde al `noindex` del preview, no a producción.
 
-**Resultado:** M1 queda cerrado local y remotamente; el umbral móvil de performance ≥85 se supera por 13 puntos en el artefacto limpio. Las cinco observaciones menores de Claude están resueltas y verificadas. Falta únicamente pedir su confirmación breve sobre `a6a12bb..9f01ea0`; con esa confirmación se hará un solo merge a `main` y después la primera ejecución manual de `Daily forecast training`.
+**Resultado:** M1 queda cerrado local y remotamente; el umbral móvil de performance ≥85 se supera por 13 puntos en el artefacto limpio. Las cinco observaciones menores de Claude están resueltas y verificadas. Falta únicamente pedir su confirmación breve sobre `8f388fd..9f01ea0`; con esa confirmación se hará un solo merge a `main` y después la primera ejecución manual de `Daily forecast training`.
 
 ---
 
