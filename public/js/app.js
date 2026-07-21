@@ -4,6 +4,7 @@
 // /data/history/<asset>.json build seed as fallback.
 
 import {
+  accuracyView,
   artifactGeneratedAt,
   chartSeries,
   forecastView,
@@ -34,6 +35,8 @@ const els = {
   signalStatus: document.getElementById('signal-status'),
   trained: document.getElementById('card-trained'),
   trainedStatus: document.getElementById('card-trained-status'),
+  accuracy: document.getElementById('card-accuracy'),
+  accuracyStatus: document.getElementById('card-accuracy-status'),
   tabs: [...document.querySelectorAll('.tab')],
 };
 
@@ -353,7 +356,14 @@ function selectAsset(asset) {
   }
   renderPrice();
   renderPrediction();
+  renderAccuracy();
   renderChart();
+}
+
+function renderAccuracy() {
+  const view = accuracyView(state.snapshot, state.asset);
+  els.accuracy.textContent = view.label;
+  els.accuracyStatus.textContent = view.status;
 }
 
 async function init() {

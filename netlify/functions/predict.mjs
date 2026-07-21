@@ -13,6 +13,8 @@ import {
   formatMexicoCityTimestamp,
   isValidSnapshot,
 } from "../lib/market-contract.mjs";
+import { PREDICTIONS_STORE } from "../lib/prediction-contract.mjs";
+import { readAccuracyBlock, recordPredictions } from "../lib/prediction-store.mjs";
 
 export const MARKET_DATA_STORE = "market-data";
 export const LATEST_SNAPSHOT_KEY = "latest.json";
@@ -48,23 +50,40 @@ export async function runPrediction({
   try {
     const prices = await fetchPrices();
     const anchoredAt = clock();
-    snapshot = createFreshSnapshot(prices, anchoredAt);
 
+    // Last measured accuracy, isolated: a predictions-store problem must not
+    // affect the price. Defaults to `unavailable` inside the reader.
+    const predictionsStore = getStoreFn(PREDICTIONS_STORE);
+    const accuracy = await readAccuracyBlock(predictionsStore);
+
+    let forecast;
     try {
       const modelStore = getStoreFn(MODEL_ARTIFACTS_STORE);
+      const baseSnapshot = createFreshSnapshot(prices, anchoredAt);
       const selected = await readUsableForecastArtifact(modelStore, anchoredAt);
       if (selected) {
-        const forecast = anchorForecast(
+        forecast = anchorForecast(
           selected.artifact,
           selected.status,
-          snapshot,
+          baseSnapshot,
           formatMexicoCityTimestamp,
         );
-        snapshot = createFreshSnapshot(prices, anchoredAt, forecast);
       }
     } catch {
       logger.warn(
         "Forecast anchoring skipped; fresh market data remains available.",
+      );
+    }
+
+    snapshot = createFreshSnapshot(prices, anchoredAt, forecast, accuracy);
+
+    // Record this anchor's predictions for later evaluation, isolated so a
+    // logging failure never blocks the price snapshot.
+    try {
+      await recordPredictions(predictionsStore, snapshot);
+    } catch {
+      logger.warn(
+        "Prediction logging skipped; the price snapshot is unaffected.",
       );
     }
 

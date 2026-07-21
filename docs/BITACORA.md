@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-07-21 — FASE 3 construida por Claude (pendiente revisión de Codex)
+
+**Reparto invertido:** esta fase la construye Claude y la revisa Codex, para que quien construye no sea quien cierra.
+
+**Decisión de arquitectura (documentada antes del código, `01_ARQUITECTURA.md` §2.4):** el registro de predicciones y las métricas son estado mutable que crece a diario → **viven en Netlify Blobs, nunca en el repo**. El `data/predictions_log.json` commiteado del diseño original queda descartado por presupuesto (un commit diario = 450 créditos/mes). Store dedicado `predictions` con `log/current.json`, `metrics/accuracy.json`, `metrics/health.json`.
+
+**Construido:**
+- `netlify/lib/contract-helpers.mjs`: helpers de validación compartidos (extraídos para no reintroducir la duplicación que la revisión de Fase 2 marcó; no toqué `forecast-contract.mjs`).
+- `netlify/lib/prediction-contract.mjs`: contrato `prediction-log/1.0` (registro + bloque público `accuracy`), id horario idempotente, dedup, direcciones con umbral 0.5 %.
+- `netlify/lib/prediction-store.mjs` + `predict.mjs`: registra una predicción por activo al anclar un forecast `fresh`, aislado; y lee el bloque `accuracy` para el snapshot. Un fallo del store no rompe el precio.
+- `netlify/lib/market-contract.mjs`: `accuracy` como campo opcional compatible del snapshot `1.0` (igual que `forecast`).
+- `ml/evaluate.py`: resuelve predicciones vencidas contra el precio real más cercano ±1h (sin interpolar), calcula accuracy rolling de 7d (≥20 muestras o `insufficient_data`), reporta huecos/pendientes, y poda el log a 30d.
+- `scripts/publish-evaluation.mjs` + `.github/workflows/evaluate.yml` (07:30 UTC): descarga el log, corre `evaluate.py`, valida y publica a Blobs con secrets. Cero commits, cero deploys.
+- UI: `forecast-ui.js accuracyView` + tarjeta «Precisión de 7 días» cableada en `app.js`.
+
+**Verificación:** 85 Node + 38 Python verdes; build, `node --check`, `git diff --check` OK. E2e: el JSON de `evaluate.py` pasa la validación JS al publicar y al leer; 25 predicciones sintéticas resueltas al 100 %. Navegador: BTC «58 % / 96 medidas», ETH «— / MIDIENDO (11)», sin errores de consola.
+
+**Un test de Fase 2 se actualizó** (`forecast-functions.test.mjs`): ahora `runPrediction` toca también el store `predictions`, así que su aserción de stores incluye `predictions` — comportamiento nuevo y legítimo, no un aflojamiento.
+
+**Pendiente:** revisión de Codex, merge único y primera ejecución real de `evaluate.yml`.
+
+---
+
 ## 2026-07-21 — FASE 2 CERRADA ✅
 
 **Pipeline real verificado:** `Daily forecast training` #1 —run `29854592038`, job `88715662743`, sobre `main` en `a44db3e`— terminó en **success**. Ejecutó 26 pruebas Python, 72 Node, entrenamiento y publicación. El artefacto `20260721T175020Z-a44db3e34bc969fc02f31132bcb22bb538c7421d-gh29854592038-1` quedó publicado y verificado en Netlify Blobs.

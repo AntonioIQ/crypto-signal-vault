@@ -4,6 +4,10 @@ import {
   assertValidPublicForecast,
   unavailableForecast,
 } from "./forecast-contract.mjs";
+import {
+  assertValidAccuracy,
+  unavailableAccuracy,
+} from "./prediction-contract.mjs";
 
 export const SCHEMA_VERSION = "1.0";
 export const TIMEZONE = "America/Mexico_City";
@@ -129,6 +133,10 @@ export function assertValidSnapshot(snapshot) {
     assertValidPublicForecast(snapshot.forecast);
   }
 
+  if (Object.hasOwn(snapshot, "accuracy")) {
+    assertValidAccuracy(snapshot.accuracy);
+  }
+
   return snapshot;
 }
 
@@ -151,6 +159,7 @@ export function createSeedSnapshot() {
     currency: CURRENCY,
     stale: true,
     forecast: unavailableForecast(),
+    accuracy: unavailableAccuracy(),
     assets: Object.fromEntries(
       Object.entries(ASSETS).map(([asset, metadata]) => [
         asset,
@@ -168,6 +177,7 @@ export function createFreshSnapshot(
   prices,
   generatedAt = new Date(),
   forecast = unavailableForecast(),
+  accuracy = unavailableAccuracy(),
 ) {
   if (!isRecord(prices)) {
     throw new ContractValidationError("Prices must be an object.");
@@ -194,6 +204,7 @@ export function createFreshSnapshot(
       }),
     ),
     forecast: clone(forecast),
+    accuracy: clone(accuracy),
   };
 
   assertValidSnapshot(snapshot);
@@ -206,6 +217,11 @@ export function createStaleSnapshot(previousSnapshot, now = new Date()) {
   const snapshot = clone(previousSnapshot);
   snapshot.stale = true;
   snapshot.forecast = agePublicForecast(previousSnapshot.forecast, now);
+  // Accuracy reflects the model's measured track record, not the freshness of
+  // the market read, so a stale snapshot keeps the last measured value as-is.
+  if (!Object.hasOwn(snapshot, "accuracy")) {
+    snapshot.accuracy = unavailableAccuracy();
+  }
 
   assertValidSnapshot(snapshot);
   return snapshot;

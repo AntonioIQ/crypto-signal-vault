@@ -102,6 +102,37 @@ export function artifactGeneratedAt(artifactVersion) {
   return Number.isFinite(generatedAt.getTime()) ? generatedAt : null;
 }
 
+// Measured 7-day accuracy for one asset. Shows a percentage only when the
+// evaluator published `available` with enough samples; otherwise the card stays
+// honestly blank and never borrows the model's confidence as a stand-in.
+export function accuracyView(snapshot, asset) {
+  const blank = { available: false, label: "—", status: "TRAS 7 DÍAS MEDIDOS" };
+  const accuracy = snapshot?.accuracy;
+  if (!accuracy || accuracy.status !== "available") return blank;
+
+  const item = accuracy.assets?.[asset];
+  if (!item) return blank;
+
+  if (
+    item.status === "available" &&
+    typeof item.hit_rate === "number" &&
+    Number.isFinite(item.hit_rate)
+  ) {
+    return {
+      available: true,
+      label: `${Math.round(item.hit_rate)} %`,
+      status: `${item.sample_size} predicciones medidas`,
+    };
+  }
+
+  if (item.status === "insufficient_data") {
+    const size = Number.isInteger(item.sample_size) ? item.sample_size : 0;
+    return { available: false, label: "—", status: `MIDIENDO (${size})` };
+  }
+
+  return blank;
+}
+
 export function chartSeries(history, snapshot, asset) {
   const historicalPoints = (history?.points ?? [])
     .filter((point) => hasValidTimestamp(point?.timestamp) && isFinitePositive(point?.price))
