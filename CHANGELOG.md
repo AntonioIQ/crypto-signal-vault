@@ -1,5 +1,29 @@
 # CHANGELOG
 
+## Fase 4 — Analista · «el chat» — CERRADA 2026-07-21
+
+**Entregable**: el chat "Pregúntale a tu analista" vivo en `https://likelycoin.netlify.app`, respondiendo con los datos propios del modelo, en español simple, y rechazando dar asesoría de inversión. Costo de operación: $0 (Groq free tier, sin tarjeta).
+
+### Qué se construyó (por Codex)
+
+- **`netlify/functions/chat.mjs`**: función on-demand con CORS allowlist, `CHAT_ENABLED` deny-by-default, validación estricta (400 caracteres, sessionId UUID, tamaño de body), rate limit doble con fallback degradado, y un clasificador de intención que **rechaza pedir/dar asesoría con plantillas ANTES de llamar al LLM**.
+- **`netlify/lib/`**: `groq-client` (proveedor Groq aislado tras un endpoint compatible con OpenAI, key solo server-side, timeout, manejo de 429 sin reintento), `analyst-prompt` (system prompt v1 con presupuesto de bytes), `analyst-context` (arma el contexto solo con datos del snapshot, separa confianza de accuracy), `analyst-fallback` (plantillas canónicas + post-procesado que quita asesoría/fugas y fuerza el % de confianza), `chat-rate-limit` (sesión + global TPM/TPD con CAS por ETag, sessionId hasheado).
+- **UI**: sección "Pregúntale a tu analista" con botones de preguntas rápidas, disclaimer permanente, oculta hasta que `CHAT_ENABLED=true`.
+- 38 pruebas Node nuevas (132 totales).
+
+### Revisión y verificación
+
+- Codex construyó la fase casi completa pero se quedó sin créditos **sin commitear**; Claude preservó el trabajo (`398f481`, atribuido) y lo revisó (**APTA PARA MERGE**, 0 bloqueantes, 0 mayores, 3 observaciones de conservadurismo). PR #3 mergeada (`4237c50`).
+- **Verificado en producción con Groq real**: pregunta legítima ("¿qué tan seguro está el modelo?") → respuesta real (`degraded:false`) con las confianzas medidas; pregunta de asesoría ("¿debo comprar bitcoin?") → **rechazada** sin llamar a Groq, describiendo lo que ve el modelo y cerrando con "no es asesoría financiera".
+
+### Nota de créditos
+
+Costó 2 deploys (30 créditos) porque `CHAT_ENABLED` no se guardó antes del primer merge; hubo que redeployar para encender el flag. Lección: crear todas las env vars antes del merge que las necesita.
+
+### Estado del roadmap
+
+Fases 1–4 del diseño original completas y en línea. No hay Fase 5 obligatoria; opcional: pulido/portafolio o saldar la deuda de Node 24 en Actions.
+
 ## Fase 3 — MLOps · «la honestidad medida» — CERRADA 2026-07-21
 
 **Entregable**: la tarjeta «Precisión de 7 días», antes vacía, ahora se llena con accuracy **medida contra el precio real que ocurrió** — nunca backtest, nunca la confianza del modelo. Regla de oro #3 hecha producto. Costo de operación: $0.

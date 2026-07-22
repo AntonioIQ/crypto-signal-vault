@@ -2,11 +2,13 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 17:45 (hora CDMX)
+**Última actualización**: 2026-07-21 20:05 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: FASE 4 — Analista · «el chat» (construida por Codex; en revisión)
+## Fase activa: ninguna — FASE 4 CERRADA ✅ (2026-07-21); el chat está VIVO en producción
+
+### FASE 4 — Analista · «el chat» — CERRADA
 
 **Rama**: `feature/phase-4-analyst` (sin deploy de producción).
 
@@ -18,7 +20,7 @@
 | 4.4 | Rate limit doble (sesión + global) en Blobs + fallback de plantillas | ☑ Implementado |
 | 4.5 | Rechazo de asesoría por clasificador ANTES de llamar al LLM; disclaimer permanente | ☑ Implementado |
 | 4.6 | UI «Pregúntale a tu analista» + botones de preguntas rápidas | ☑ Implementado |
-| 4.7 | Revisión externa (Claude) + merge batched | ◐ Pendiente: revisión, luego merge |
+| 4.7 | Revisión externa (Claude) + merge batched | ☑ Claude aprobó APTA (0 bloqueantes/mayores); PR #3 mergeada (`4237c50`); chat vivo tras poner `GROQ_API_KEY` + `CHAT_ENABLED=true` |
 
 ### Nota de continuidad (2026-07-21)
 
@@ -164,10 +166,10 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Revisión externa de la Fase 4** (rama `feature/phase-4-analyst`) antes del merge. Foco: que el bot de verdad rechace asesoría (clasificador + prompt), aislamiento del proveedor y de la key, que el rate limit doble proteja la cuota de Groq (TPM/TPD) y el compute de Netlify, y que ningún secreto llegue al cliente. Si no hay bloqueantes: un solo merge a `main` (15 créditos) y encender `CHAT_ENABLED=true` en Netlify una vez puesta la `GROQ_API_KEY`.
+➡️ **Fases 1–4 cerradas; el producto del roadmap original está completo y en línea.** No hay una Fase 5 obligatoria. Opciones si se quiere seguir: (a) **dejar reposar** — el ciclo de Fase 3 sigue acumulando accuracy real (~48 h para el primer porcentaje) y no requiere acción; (b) **Fase 5 de pulido/portafolio** (`05_PLAN_EJECUCION.md`): README con badges, `/status.html`, caso de estudio escrito; (c) **saldar deuda técnica**: actions v4 fuerzan Node 24 en GitHub Actions.
 
-**Verificación de que el ciclo de Fase 3 vive** (vistazo, sin acción): `/api/latest` debe traer `accuracy.status: available`; tras ~48 h, algún activo debe pasar a `hit_rate` con `sample_size ≥ 20`. Si el sample_size no crece, revisar que `predict` esté registrando (log en el store `predictions`).
+**Verificación de que el ciclo de Fase 3 vive** (vistazo, sin acción): `/api/latest` debe traer `accuracy.status: available`; tras ~48 h, algún activo debe pasar a `hit_rate` con `sample_size ≥ 20`. Si no crece, revisar que `predict` esté registrando (store `predictions`).
 
-**Deuda no bloqueante heredada de Fase 2**: GitHub Actions fuerza las actions v4 a Node 24 (los runs pasan). Revisar el upgrade en algún momento de Fase 4.
+**Nota de créditos**: la Fase 4 costó **2 deploys (30 créditos)** en vez de 1, porque `CHAT_ENABLED` no se guardó antes del primer merge y hubo que redeployar para encender el flag. Lección: crear TODAS las env vars antes del merge que las necesita.
 
 **Recordatorios de presupuesto** (`06_PRESUPUESTO.md`): iterar en `feature/*` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), pushes solo-docs no construyen. Secrets de Blobs ya existen; el reparto de Fase 4 lo decide Antonio.

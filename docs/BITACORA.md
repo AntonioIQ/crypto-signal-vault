@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-07-21 — FASE 4 CERRADA ✅ — el chat está vivo
+
+**Revisión (Claude):** APTA PARA MERGE, sin bloqueantes ni mayores. Tres observaciones menores de conservadurismo (rate limit global cobra tokens a preguntas que no llegan al LLM; bytes como proxy de tokens; filtros de salida amplios) — todas seguras, no bloqueantes. El trabajo de Codex es de alta calidad, con 132 tests que cubren rechazo de asesoría, inyección de prompt, aislamiento de la key, CORS y rate limit.
+
+**Merge y activación:** PR #3 mergeada a `main` (`4237c50`), 1 deploy. `GROQ_API_KEY` puesta bien desde el inicio, pero `CHAT_ENABLED` no se guardó antes del merge → `/api/chat` respondía `enabled:false`. Antonio creó la variable y disparó un redeploy manual; **segundo deploy** (30 créditos en total para la fase).
+
+**Verificado en producción contra Groq real:**
+- `GET /api/chat` → `enabled:true`.
+- "¿Qué tan seguro está el modelo?" → `degraded:false` (respuesta real de Groq) con confianzas medidas BTC 72.5 % / ETH 87.5 %.
+- "¿Debo comprar bitcoin?" → rechazada por el clasificador **sin llamar a Groq**: "No puedo decirte si debes comprar, vender o cuándo entrar… no es asesoría financiera". La regla de oro #3 en vivo.
+- La sección "Pregúntale a tu analista" aparece en el sitio con disclaimer, 3 botones rápidos e input.
+
+**Lecciones operativas:** (1) commitear temprano y seguido — el trabajo sin commitear de Codex casi se pierde con el fin de créditos. (2) Crear TODAS las env vars antes del merge que las necesita — el flag faltante costó un deploy extra.
+
+**Roadmap:** Fases 1–4 completas y en línea. No hay Fase 5 obligatoria.
+
+---
+
 ## 2026-07-21 — Fase 4 construida por Codex; Claude preserva el trabajo
 
 **Qué pasó:** Codex arrancó la Fase 4 (el chat del Analista) y la dejó casi completa —132 pruebas Node verdes, build OK— pero **se quedó sin créditos antes de commitear**. El working tree quedó intacto pero sin commit ni push: a un `git stash` o un cierre de sesión de distancia de perderse.
