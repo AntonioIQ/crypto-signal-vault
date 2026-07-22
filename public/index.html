@@ -125,6 +125,47 @@
         </div>
       </section>
 
+      <section id="analyst-section" class="analyst-section panel" aria-labelledby="analyst-title" hidden>
+        <div class="analyst-intro">
+          <p class="section-label">LECTURA DEL MODELO</p>
+          <h2 id="analyst-title">Pregúntale a tu analista</h2>
+          <p>Consulta el precio, el pronóstico actual o la precisión que ya medimos. Las respuestas usan únicamente los datos visibles de LikelyCoin.</p>
+
+          <div class="quick-questions" role="group" aria-label="Preguntas rápidas">
+            <button type="button" data-question="¿Qué espera el modelo en las próximas 48 horas?">¿Qué espera en 48 horas?</button>
+            <button type="button" data-question="¿Qué tan segura es la predicción actual?">¿Qué tan segura es la lectura?</button>
+            <button type="button" data-question="¿Qué tan seguido ha acertado el modelo?">¿Qué tan seguido ha acertado?</button>
+          </div>
+
+          <p id="analyst-disclaimer" class="analyst-disclaimer">Este analista describe los datos del modelo. No es asesoría financiera ni recomienda comprar o vender.</p>
+        </div>
+
+        <div class="analyst-conversation">
+          <form id="analyst-form" novalidate>
+            <label for="analyst-question">Tu pregunta</label>
+            <textarea
+              id="analyst-question"
+              name="question"
+              rows="3"
+              maxlength="400"
+              required
+              aria-describedby="analyst-help analyst-count analyst-disclaimer"
+              placeholder="Ejemplo: ¿qué significa la confianza de esta lectura?"
+            ></textarea>
+            <div class="analyst-form-meta">
+              <span id="analyst-help">Una pregunta por vez</span>
+              <span id="analyst-count">0/400</span>
+            </div>
+            <button id="analyst-submit" class="analyst-submit" type="submit">Preguntar al analista</button>
+          </form>
+
+          <p id="analyst-status" class="analyst-status" role="status" aria-live="polite" aria-atomic="true"></p>
+          <div id="analyst-answer" class="analyst-answer" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden>
+            <p id="analyst-answer-text"></p>
+          </div>
+        </div>
+      </section>
+
       <section class="system-section" aria-labelledby="system-title">
         <div class="section-heading">
           <div>
@@ -168,5 +209,6 @@
   </div>
 
   <script type="module" src="js/app.js"></script>
+  <script type="module" src="js/chat.js"></script>
 </body>
 </html>

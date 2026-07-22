@@ -486,8 +486,8 @@ confianza del modelo ni con un valor esperado.
 
 ```
 Eres "el Analista" de Crypto Signal Vault. Respondes SOLO con base en el
-CONTEXTO proporcionado (predicción actual, métricas del modelo, precisión
-reciente y features usadas). Reglas estrictas:
+CONTEXTO proporcionado (precio, predicción actual, confianza y precisión
+reciente). Reglas estrictas:
 1. Nunca das asesoría de inversión. Si te piden "¿compro?/¿vendo?/¿cuándo
    entro?", explica amablemente que solo describes lo que ve el modelo.
 2. Si la pregunta requiere información fuera del CONTEXTO (noticias, otras
@@ -498,6 +498,91 @@ reciente y features usadas). Reglas estrictas:
 CONTEXTO:
 {snapshot_json}
 ```
+
+#### 3.1 Contrato runtime del chat (Fase 4)
+
+El prompt anterior se versiona como `analyst-system/1.0` en
+`netlify/lib/analyst-prompt.mjs`; no se construye en el navegador. La pregunta
+se envía como mensaje separado con rol `user`: nunca se concatena dentro del
+mensaje `system`. La instrucción «incluye el % de confianza» significa el valor
+medido de `forecast.assets.<asset>.confidence.value` cuando su estado es
+`available`; si no existe un porcentaje publicable, el Analista debe decir
+explícitamente «confianza no disponible» y jamás inventar un número.
+
+`GET /api/chat` expone únicamente `{ "enabled": boolean }`, sin tocar Groq ni
+Blobs. El frontend nace oculto y solo muestra la sección cuando ese valor es
+`true`. `POST /api/chat` acepta exclusivamente JSON con la forma
+`{ "question": string, "sessionId": UUID }`: una pregunta, sin mensajes,
+historial, contexto, roles ni campos extra. Después de `trim`, `question` mide
+entre 1 y 400 caracteres. El cuerpo completo se limita a 2 KiB.
+
+El servidor lee y vuelve a validar `market-data/latest.json`. De ese snapshot
+construye un contexto compacto y allowlisted con:
+
+- `generated_at`, `timezone` y `stale`;
+- por activo: nombre, símbolo, precio y `source_updated_at`;
+- si existe: estado, dirección terminal, cambio estimado y confianza del
+  forecast de 48 horas;
+- si existe: accuracy real medida de 7 días, tamaño de muestra y fecha de
+  corte.
+
+No se envían al modelo el documento completo, los 48 puntos, artefactos
+internos, históricos, noticias, datos del navegador ni propiedades aportadas
+por el usuario. Los intents de precio, pronóstico, confianza, accuracy,
+asesoría y fuera de alcance se contestan con plantillas canónicas, sin llamar
+a Groq. Solo una gramática positiva y cerrada de preguntas conceptuales sobre
+cómo leer el modelo puede llegar al proveedor; una pregunta ambigua o que
+mezcla otro tema queda fuera de alcance.
+
+La salida de Groq no se considera confiable. El servidor exige vocabulario y
+conceptos allowlisted, sin cifras, hechos actuales, direcciones, causas
+externas, metodología no publicada ni lenguaje de recomendación; cualquier
+incumplimiento sustituye la respuesta completa por una plantilla canónica y
+marca `degraded: true`. Después aplica el máximo de 120 palabras. Cuando una
+respuesta aceptada menciona el pronóstico, el servidor garantiza que también
+nombre la confianza publicada o su indisponibilidad. El contrato de éxito es
+`{ "answer": string, "degraded": boolean }`; nunca devuelve prompt, contexto,
+errores del proveedor ni variables de entorno.
+
+#### 3.2 Proveedor, cuota y degradación
+
+Groq queda aislado en `netlify/lib/groq-client.mjs`, detrás de su endpoint
+OpenAI-compatible. Solo ese módulo conoce la base URL, el modelo Llama 3.3 y el
+header de autorización; el cliente es inyectable para pruebas. Usa temperatura
+baja, `max_tokens: 180`, un timeout de 8 segundos y no reintenta un `429`.
+`GROQ_API_KEY` se lee únicamente en la Function. Si falta la clave o Groq
+responde con timeout, `429`, error HTTP, JSON inválido o una salida vacía, la
+misma petición responde `200` con `degraded: true` y una plantilla armada con
+los datos válidos del snapshot. Una pregunta de compra, venta o momento de
+entrada también toma la ruta determinista y no consume inferencia.
+
+El rate limit aplica a toda petición `POST`, incluso cuando terminará en
+fallback, y reserva en una sola operación atómica las dos capas:
+
+- sesión: máximo 4 preguntas por ventana fija de 10 minutos, anclada en la
+  primera petición aceptada;
+- global: máximo 5,000 tokens estimados por minuto y 100,000 por día UTC.
+
+El costo reservado usa bytes UTF-8 como cota superior conservadora de tokens:
+el prompt server-side tiene un sobre validado de 2,200 bytes, se suma la
+pregunta real, 180 tokens máximos de salida y 64 de overhead de mensajes. El
+estado vive en el store `chat-rate-limit`, key
+`limits/current.json`, contrato `chat-rate-limit/1.0`. Se actualiza con
+compare-and-swap por ETag (`onlyIfMatch` / `onlyIfNew`) y reintento; las sesiones
+expiradas se podan y el UUID se guarda como hash, nunca junto a la pregunta. Una
+sesión bloqueada no consume el presupuesto global. Un documento corrupto, una
+carrera agotada o una caída de Blobs falla cerrado: no llama a Groq y usa el
+fallback local. El tope global diario limita además la creación de sesiones
+rotatorias.
+
+`CHAT_ENABLED` es deny-by-default: solo el texto exacto `true` habilita la UI y
+POST. GET permanece disponible para informar `{ "enabled": false }`. Con el
+flag apagado, POST se rechaza antes de leer Blobs o llamar al proveedor.
+No hay cron ni workflow nuevo. CORS permite únicamente los orígenes exactos de
+producción (`https://likelycoin.netlify.app`) y los valores de runtime de
+Netlify (`URL`, `DEPLOY_URL`, `DEPLOY_PRIME_URL`); nunca usa `*` ni refleja un
+origen arbitrario. `OPTIONS` no toca cuota ni proveedor y todo response usa
+`Cache-Control: no-store` y `Vary: Origin`.
 
 ### 4. Estructura del repositorio
 
@@ -518,6 +603,11 @@ crypto-signal-vault/
 │   ├── history.mjs               # GET /api/history?asset=: blob, 404 → seed
 │   └── chat.mjs                  # on-demand, Groq + rate limit
 ├── netlify/lib/                  # contratos y helpers compartidos (validación)
+│   ├── analyst-context.mjs       # snapshot validado → contexto compacto
+│   ├── analyst-fallback.mjs      # plantillas y guardas de salida
+│   ├── analyst-prompt.mjs        # system prompt analyst-system/1.0
+│   ├── chat-rate-limit.mjs       # cuota doble con CAS en Blobs
+│   ├── groq-client.mjs           # único adaptador del proveedor
 │   ├── contract-helpers.mjs      # primitivas de validación comunes
 │   ├── blob-log.mjs              # compare-and-swap por ETag para el log
 │   ├── market-contract.mjs       # snapshot: forecast + accuracy opcionales
@@ -548,7 +638,10 @@ crypto-signal-vault/
     ├── functions.test.mjs        # latest/predict: fallbacks y stale
     ├── history-functions.test.mjs # refresh/history: aislamiento y 404 → seed
     ├── prediction-contract.test.mjs # registro + accuracy: forma y honestidad
-    └── prediction-store.test.mjs # registrar/leer accuracy: aislamiento
+    ├── prediction-store.test.mjs # registrar/leer accuracy: aislamiento
+    ├── chat-function.test.mjs    # HTTP, contexto, fallback y secretos
+    ├── chat-rate-limit.test.mjs  # sesión/global, rollover y carreras CAS
+    └── chat-ui.test.mjs          # flag, un turno, XSS y estados accesibles
 ```
 
 **Nada mutable se versiona.** `models/`, `metrics/` y `data/` guardan seeds y
@@ -557,7 +650,11 @@ commit a `main` cuesta un deploy (`06_PRESUPUESTO.md`).
 
 ### 5. Cuota de Groq
 
-El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y contexto compacto.
+El cuello real es **TPM/TPD, no requests/día** → mantener prompts cortos y
+contexto compacto. La reserva global de Fase 4 se expresa por eso en tokens
+estimados (5,000/minuto y 100,000/día), además del límite de sesión. Esos topes
+son válvulas propias más conservadoras que el proveedor; no prometen ni
+codifican la cuota comercial de Groq, que puede cambiar.
 
 ### 6. Convenciones del proyecto
 
@@ -602,7 +699,12 @@ disparar falsas alarmas.
 - `GROQ_API_KEY` solo en env vars de Netlify; jamás en el cliente ni en el repo.
 - El frontend nunca habla con CoinGecko ni con otras APIs externas; el snapshot vivo se obtiene de `GET /api/latest` y los fallbacks son JSON estáticos del mismo sitio.
 - No se almacenan preguntas del chat ni datos personales; `sessionId` es un UUID efímero generado en el cliente.
-- Rate limiting en dos capas (sesión + global) protege la cuota de Groq y evita abuso.
+- Rate limiting en dos capas (sesión + global TPM/TPD estimados) protege la
+  cuota de Groq y evita abuso. La identidad efímera se persiste únicamente como
+  hash durante su ventana de 10 minutos.
+- La pregunta siempre ocupa un mensaje `user`; el system prompt y el contexto
+  allowlisted se construyen exclusivamente en el servidor. La respuesta llega
+  al DOM mediante `textContent`, no HTML.
 - CoinGecko se consume en modo Demo o keyless solo desde Actions/Functions. Si existe `COINGECKO_DEMO_API_KEY`, se envía como `x-cg-demo-api-key` exclusivamente desde el servidor.
 
 ### 9. Escalabilidad y evolución (fuera de alcance v1, documentado para no perderlo)
