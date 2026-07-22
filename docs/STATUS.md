@@ -6,7 +6,25 @@
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — FASE 3 CERRADA ✅ (2026-07-21); FASE 4 lista para arrancar
+## Fase activa: FASE 4 — Analista · «el chat» (construida por Codex; en revisión)
+
+**Rama**: `feature/phase-4-analyst` (sin deploy de producción).
+
+| # | Paquete | Estado |
+|---|---|---|
+| 4.1 | `chat.mjs` on-demand: CORS, `CHAT_ENABLED` deny-by-default, validación de entrada | ☑ Implementado |
+| 4.2 | `groq-client.mjs`: proveedor aislado (endpoint OpenAI-compat), key server-side, timeout/429 | ☑ Implementado |
+| 4.3 | System prompt v1 + armado de contexto server-side con presupuesto de bytes | ☑ Implementado |
+| 4.4 | Rate limit doble (sesión + global) en Blobs + fallback de plantillas | ☑ Implementado |
+| 4.5 | Rechazo de asesoría por clasificador ANTES de llamar al LLM; disclaimer permanente | ☑ Implementado |
+| 4.6 | UI «Pregúntale a tu analista» + botones de preguntas rápidas | ☑ Implementado |
+| 4.7 | Revisión externa (Claude) + merge batched | ◐ Pendiente: revisión, luego merge |
+
+### Nota de continuidad (2026-07-21)
+
+Codex construyó la Fase 4 casi completa (132 pruebas Node verdes, build OK) pero **se quedó sin créditos antes de commitear**; el árbol quedó intacto sin commit. Claude preservó el trabajo con un commit atribuido (`398f481`) y completó STATUS/BITÁCORA. El código es de Codex; Claude no escribió lógica de la fase, así que la revisión externa sigue siendo válida.
+
+**Prerequisito de Antonio (bloqueante para probar contra Groq real)**: crear cuenta gratuita en Groq (console.groq.com, sin tarjeta), generar API key, y agregarla como `GROQ_API_KEY` en env vars de Netlify. Mientras no exista, el chat responde con el fallback de plantillas (probado con cliente Groq inyectable).
 
 ### FASE 3 — MLOps · «la honestidad medida» — CERRADA
 
@@ -146,7 +164,7 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Dejar acumular predicciones ~48 h**: la tarjeta muestra «MIDIENDO (0)» hasta juntar ≥20 predicciones resueltas por activo; ahí aparece el primer porcentaje real. `evaluate.yml` corre solo a diario (07:30 UTC). Después, **arrancar la FASE 4 — Analista · «el chat»** (`05_PLAN_EJECUCION.md`): `chat.mjs` con Groq, system prompt v1 (ya en `01_ARQUITECTURA.md` §3), rate limit doble, fallback de plantillas, feature flag `CHAT_ENABLED`.
+➡️ **Revisión externa de la Fase 4** (rama `feature/phase-4-analyst`) antes del merge. Foco: que el bot de verdad rechace asesoría (clasificador + prompt), aislamiento del proveedor y de la key, que el rate limit doble proteja la cuota de Groq (TPM/TPD) y el compute de Netlify, y que ningún secreto llegue al cliente. Si no hay bloqueantes: un solo merge a `main` (15 créditos) y encender `CHAT_ENABLED=true` en Netlify una vez puesta la `GROQ_API_KEY`.
 
 **Verificación de que el ciclo de Fase 3 vive** (vistazo, sin acción): `/api/latest` debe traer `accuracy.status: available`; tras ~48 h, algún activo debe pasar a `hit_rate` con `sample_size ≥ 20`. Si el sample_size no crece, revisar que `predict` esté registrando (log en el store `predictions`).
 
