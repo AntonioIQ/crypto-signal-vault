@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-07-21 — Fase 4 construida por Codex; Claude preserva el trabajo
+
+**Qué pasó:** Codex arrancó la Fase 4 (el chat del Analista) y la dejó casi completa —132 pruebas Node verdes, build OK— pero **se quedó sin créditos antes de commitear**. El working tree quedó intacto pero sin commit ni push: a un `git stash` o un cierre de sesión de distancia de perderse.
+
+**Qué hice:** verifiqué el estado (todo compila, 132 tests pasan, Python intacto, cero fuga de `GROQ_API_KEY` en `public/`), revisé las piezas críticas (CORS, `CHAT_ENABLED` deny-by-default, aislamiento del proveedor, rechazo de asesoría por clasificador antes de llamar al LLM, presupuesto de bytes del prompt) y **commiteé el trabajo tal cual, atribuido a Codex** (`398f481`), luego lo pusheé a `feature/phase-4-analyst`. Completé STATUS/BITÁCORA, que eran lo único que Codex no alcanzó (sí actualizó `01_ARQUITECTURA.md`).
+
+**Lección operativa:** commitear temprano y seguido. El trabajo de un agente sin commitear es frágil ante el fin de créditos. En adelante, checkpoints commiteados en la rama feature (gratis, sin deploy) en vez de un solo commit al final.
+
+**Estado:** el código es de Codex; Claude no escribió lógica de la fase, así que la revisión externa de Claude sigue siendo legítima. Pendiente: revisión, merge único, y `GROQ_API_KEY` + `CHAT_ENABLED=true` en Netlify (prerequisito de Antonio).
+
+---
+
 ## 2026-07-21 — FASE 3 CERRADA ✅
 
 **Codex confirmó APTA** tras verificar que los 6 hallazgos quedaron resueltos (segunda pasada sobre `047b95c…568dba3`), con un único residual no bloqueante: `baselinePath` opcional en llamadas directas al publicador. Lo cerré haciéndolo obligatorio en el CLI canónico (`3a0b606`), la biblioteca conserva su default seguro.
