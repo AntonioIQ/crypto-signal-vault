@@ -590,36 +590,13 @@ a {
 
 .sv-cw {
   margin-top: 10px;
+  cursor: pointer;
 }
 
-.sv-svg {
+.sv-canvas {
   width: 100%;
-  height: 210px;
+  height: 250px;
   display: block;
-  overflow: visible;
-}
-
-.sv-axis {
-  stroke: rgba(199, 232, 219, 0.18);
-  stroke-width: 1;
-}
-
-.sv-thr {
-  stroke: var(--muted);
-  stroke-width: 1;
-  stroke-dasharray: 4 4;
-  opacity: 0.5;
-}
-
-.sv-albl {
-  fill: var(--muted);
-  font-size: 0.62rem;
-  font-weight: 600;
-}
-
-.sv-dot {
-  transition: cx 0.9s cubic-bezier(0.34, 1.1, 0.5, 1),
-    cy 0.9s cubic-bezier(0.34, 1.1, 0.5, 1), opacity 0.4s;
 }
 
 .sv-note {

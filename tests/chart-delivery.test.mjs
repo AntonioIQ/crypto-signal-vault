@@ -2,17 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-// The chart is a bespoke SVG component with no charting library: no external
-// hosts, no vendored bundle, and no runtime dependency to pin.
+// Bespoke visualizations, no library: the price chart is SVG, the scenario
+// distribution is a canvas Galton animation. No charting or viz dependency.
 
-test("no charting library is a project dependency", async () => {
+test("no charting or viz library is a project dependency", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
-  // The price chart is bespoke; only d3-force (physics for the scenario
-  // beeswarm) is a viz dependency, not a charting library.
   assert.equal(deps["chart.js"], undefined);
   assert.equal(deps["d3"], undefined);
-  assert.equal(deps["d3-force"], "^3.0.0");
+  assert.equal(deps["d3-force"], undefined);
 });
 
 test("the chart module is self-contained and has no external hosts", async () => {
@@ -35,15 +33,14 @@ test("index.html declares a favicon and loads no chart script", async () => {
   assert.doesNotMatch(html, /<script[^>]+(?:chart|vendor)/i);
 });
 
-test("the build vendors d3-force locally and no Chart.js bundle", async () => {
+test("the build copies no vendored bundle", async () => {
   const build = await readFile("scripts/copy-data.mjs", "utf8");
-  assert.doesNotMatch(build, /chart\.umd/i);
-  assert.match(build, /d3-force/);
+  assert.doesNotMatch(build, /chart\.umd|vendor|d3-/i);
 });
 
-test("the scenario viz loads d3 from local vendor with no external hosts", async () => {
+test("the scenario viz is a self-contained canvas component, no external hosts", async () => {
   const viz = await readFile("public/js/scenario-viz.js", "utf8");
   assert.match(viz, /export function mountScenarioViz/);
-  assert.match(viz, /\/js\/vendor\/\$\{module\}\.min\.js/);
+  assert.match(viz, /getContext\(['"]2d['"]\)/);
   assert.doesNotMatch(viz, /https?:\/\//i);
 });
