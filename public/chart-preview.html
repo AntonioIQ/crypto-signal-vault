@@ -52,11 +52,15 @@
   </div>
   <script type="module">
     import { initLikelyChart } from './js/likely-chart.js';
-    const j = (u) => fetch(u).then((r) => r.json());
+    // Live API first (real data on the deploy), static seed as fallback.
+    const load = async (live, seed) => {
+      try { const r = await fetch(live); if (r.ok) return await r.json(); } catch { /* fall through */ }
+      return (await fetch(seed)).json();
+    };
     Promise.all([
-      j('data/latest.json'),
-      j('data/history/btc.json'),
-      j('data/history/eth.json'),
+      load('/api/latest', 'data/latest.json'),
+      load('/api/history?asset=btc', 'data/history/btc.json'),
+      load('/api/history?asset=eth', 'data/history/eth.json'),
     ]).then(([snapshot, btc, eth]) => {
       initLikelyChart(document.getElementById('chart'), { snapshot, histories: { btc, eth } });
     });
