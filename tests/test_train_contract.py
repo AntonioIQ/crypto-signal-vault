@@ -100,6 +100,7 @@ class DirectionAndConfidenceTests(unittest.TestCase):
                 "status": "available",
                 "method": "rolling_origin_48h_residuals",
                 "sample_size": 20,
+                "scenarios": [0.01] * 15 + [-0.01] * 5,
             },
             confidence,
         )
@@ -109,6 +110,8 @@ class DirectionAndConfidenceTests(unittest.TestCase):
         self.assertIsNone(confidence["value"])
         self.assertEqual("insufficient_validation", confidence["status"])
         self.assertEqual(19, confidence["sample_size"])
+        # The scenarios are exposed even below the publish threshold.
+        self.assertEqual([0.01] * 19, confidence["scenarios"])
 
 
 class RollingOriginTests(unittest.TestCase):

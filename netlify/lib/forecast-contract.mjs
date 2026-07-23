@@ -122,11 +122,12 @@ function directionFor(terminalReturn) {
 }
 
 function validateConfidence(value, label) {
-  const confidence = requireExactObject(
-    value,
-    ["value", "status", "method", "sample_size"],
-    label,
-  );
+  // `scenarios` is optional and additive; the shape stays exact otherwise so no
+  // other unknown field can slip through.
+  const fields = isRecord(value) && Object.hasOwn(value, "scenarios")
+    ? ["value", "status", "method", "sample_size", "scenarios"]
+    : ["value", "status", "method", "sample_size"];
+  const confidence = requireExactObject(value, fields, label);
 
   if (
     confidence.method !== FORECAST_CONFIDENCE_METHOD ||
@@ -134,6 +135,16 @@ function validateConfidence(value, label) {
     confidence.sample_size < 0
   ) {
     throw new ForecastContractError(`${label} metadata is invalid.`);
+  }
+
+  if (Object.hasOwn(confidence, "scenarios")) {
+    if (
+      !Array.isArray(confidence.scenarios) ||
+      confidence.scenarios.length !== confidence.sample_size ||
+      !confidence.scenarios.every(isFiniteNumber)
+    ) {
+      throw new ForecastContractError(`${label}.scenarios is invalid.`);
+    }
   }
 
   if (confidence.sample_size < 20) {
