@@ -1,17 +1,20 @@
-// LikelyCoin — bespoke SVG chart (Aurora): line/candle modes, forecast, hover.
-// No charting library: pure SVG for a light bundle and full control. Candles are
-// bucketed by calendar day from the real hourly history (honest OHLC), the
-// forecast is the anchored 48h path, both from the public snapshot/history.
+// LikelyCoin — bespoke SVG chart (no charting library). Chart-only component:
+// the dashboard owns the BTC/ETH tabs and the price; this renders the chart
+// with a Línea/Velas mode toggle, a forecast on/off toggle, and hover.
+// Candles are real daily OHLC bucketed from the hourly history; the forecast is
+// the anchored 48h path. Colors come from the site CSS variables so it matches
+// the theme (real line/up = --accent, forecast/down = --forecast/--chart-down).
 
 const W = 720;
-const H = 330;
+const H = 300;
 const PAD = { l: 8, r: 8, t: 14 };
-const PRICE_H = 214;
-const VOL_TOP = 240;
-const VOL_H = 72;
+const PRICE_H = 240;
 
 const priceFmt = new Intl.NumberFormat('es-MX', {
   style: 'currency', currency: 'USD', maximumFractionDigits: 0,
+});
+const dayFmt = new Intl.DateTimeFormat('es-MX', {
+  timeZone: 'America/Mexico_City', day: 'numeric', month: 'short',
 });
 
 function toCandles(points) {
@@ -35,63 +38,59 @@ function forecastPath(snapshot, asset) {
   const item = fc.assets?.[asset];
   const anchor = snapshot?.assets?.[asset]?.price;
   if (!item?.points?.length || typeof anchor !== 'number') return null;
-  return { anchor, prices: item.points.map((p) => p.price), direction: item.direction, status: fc.status };
+  return { anchor, prices: item.points.map((p) => p.price), status: fc.status };
 }
 
-export function initLikelyChart(root, { snapshot, histories }) {
-  root.classList.add('lk');
-  root.innerHTML = `
-    <div class="lk-head">
-      <div class="lk-tabs" role="tablist">
-        <button class="lk-tab active" data-asset="btc">BTC</button>
-        <button class="lk-tab" data-asset="eth">ETH</button>
+export function mountLikelyChart(container, { snapshot, histories }) {
+  container.classList.add('lk');
+  container.innerHTML = `
+    <div class="lk-controls">
+      <div class="lk-modes" role="tablist" aria-label="Tipo de gráfica">
+        <button class="lk-mode" data-mode="line" role="tab">Línea</button>
+        <button class="lk-mode active" data-mode="candle" role="tab" aria-selected="true">Velas</button>
       </div>
-      <div class="lk-modes">
-        <button class="lk-mode" data-mode="line">Línea</button>
-        <button class="lk-mode active" data-mode="candle">Velas</button>
-      </div>
-    </div>
-    <div class="lk-price"><span class="lk-now">—</span><span class="lk-chg"></span></div>
-    <div class="lk-legend">
-      <button class="lk-chip on" data-series="fc"><span class="sw sw-fc"></span>Pronóstico 48 h</button>
+      <button class="lk-fc-toggle on" aria-pressed="true"><span class="lk-fc-sw"></span>Pronóstico 48 h</button>
     </div>
     <div class="lk-cw">
       <svg class="lk-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Gráfica de precio y pronóstico"></svg>
       <div class="lk-tip" hidden></div>
-    </div>`;
+    </div>
+    <p class="lk-note chart-note"></p>`;
 
-  const svg = root.querySelector('.lk-svg');
-  const tip = root.querySelector('.lk-tip');
-  const nowEl = root.querySelector('.lk-now');
-  const chgEl = root.querySelector('.lk-chg');
+  const svg = container.querySelector('.lk-svg');
+  const tip = container.querySelector('.lk-tip');
+  const note = container.querySelector('.lk-note');
   const state = { asset: 'btc', mode: 'candle', showFc: true };
 
-  function scales(asset) {
-    const hist = histories[asset]?.points ?? [];
+  function scales() {
+    const hist = histories[state.asset]?.points ?? [];
     const candles = toCandles(hist);
-    const fc = state.showFc ? forecastPath(snapshot, asset) : null;
-    const NC = candles.length;
+    const fc = state.showFc ? forecastPath(snapshot, state.asset) : null;
     const NH = hist.length;
+    const NC = candles.length;
     const fcN = fc ? fc.prices.length : 0;
     const prices = [
       ...hist.map((p) => p.price),
       ...candles.flatMap((c) => [c.h, c.l]),
       ...(fc ? [fc.anchor, ...fc.prices] : []),
     ].filter((v) => typeof v === 'number');
+    if (!prices.length) return null;
     const lo = Math.min(...prices) * 0.995;
     const hi = Math.max(...prices) * 1.005;
     const iw = W - PAD.l - PAD.r;
     const total = state.mode === 'candle' ? NC + fcN / 6 : NH + fcN;
     return {
-      hist, candles, fc, NC, NH, fcN, lo, hi, total,
+      hist, candles, fc, NH, NC, fcN, lo,
       X: (i) => PAD.l + (i / (total - 1)) * iw,
       Y: (v) => PAD.t + PRICE_H - ((v - lo) / (hi - lo)) * PRICE_H,
+      total,
     };
   }
 
   function draw(animate) {
-    const s = scales(state.asset);
+    const s = scales();
     svg._s = s;
+    if (!s) { svg.innerHTML = ''; note.textContent = 'Aún no hay datos para graficar.'; return; }
     const { X, Y, lo } = s;
     let grid = '';
     for (let g = 0; g <= 3; g += 1) {
@@ -100,9 +99,9 @@ export function initLikelyChart(root, { snapshot, histories }) {
     }
     let body = '';
     if (state.mode === 'line') {
-      const line = (arr, off) => arr.map((v, i) => (i ? 'L' : 'M') + X(i + off).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
-      const rp = line(s.hist.map((p) => p.price), 0);
-      body += `<path class="lk-area" fill="var(--lk-accent)" d="${rp} L ${X(s.NH - 1)} ${Y(lo)} L ${X(0)} ${Y(lo)} Z"/>`;
+      const pts = s.hist.map((p) => p.price);
+      const rp = pts.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
+      body += `<path class="lk-area" d="${rp} L ${X(s.NH - 1)} ${Y(lo)} L ${X(0)} ${Y(lo)} Z"/>`;
       body += `<path class="lk-real" d="${rp}"/>`;
       if (s.fc) {
         const fp = [s.fc.anchor, ...s.fc.prices].map((v, i) => (i ? 'L' : 'M') + X(s.NH - 1 + i).toFixed(1) + ' ' + Y(v).toFixed(1)).join(' ');
@@ -112,7 +111,7 @@ export function initLikelyChart(root, { snapshot, histories }) {
       const cw = (W - PAD.l - PAD.r) / s.total * 0.6;
       s.candles.forEach((c, i) => {
         const up = c.c >= c.o;
-        const col = `var(--lk-${up ? 'up' : 'down'})`;
+        const col = up ? 'var(--accent)' : 'var(--chart-down)';
         const x = X(i);
         body += `<line class="lk-wick" x1="${x}" y1="${Y(c.h)}" x2="${x}" y2="${Y(c.l)}" stroke="${col}"/>`;
         body += `<rect class="lk-body" x="${(x - cw / 2).toFixed(1)}" width="${cw.toFixed(1)}" y="${Math.min(Y(c.o), Y(c.c)).toFixed(1)}" height="${Math.max(2, Math.abs(Y(c.o) - Y(c.c))).toFixed(1)}" fill="${col}" rx="1" style="transition-delay:${i * 14}ms"/>`;
@@ -124,7 +123,7 @@ export function initLikelyChart(root, { snapshot, histories }) {
     }
     svg.innerHTML = `${grid}${body}
       <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + PRICE_H}"/>
-      <circle class="lk-dot" r="4" fill="var(--lk-accent)"/>`;
+      <circle class="lk-dot" r="4"/>`;
 
     if (animate) {
       requestAnimationFrame(() => {
@@ -142,14 +141,10 @@ export function initLikelyChart(root, { snapshot, histories }) {
       });
     }
 
-    const live = snapshot?.assets?.[state.asset]?.price;
-    const hist = s.hist;
-    nowEl.textContent = typeof live === 'number' ? priceFmt.format(live) : '—';
-    if (hist.length > 25) {
-      const chg = ((hist.at(-1).price - hist.at(-25).price) / hist.at(-25).price) * 100;
-      chgEl.textContent = `${chg >= 0 ? '▲ ' : '▼ '}${Math.abs(chg).toFixed(1)} %`;
-      chgEl.className = `lk-chg ${chg >= 0 ? 'up' : 'down'}`;
-    }
+    const assetName = snapshot?.assets?.[state.asset]?.name ?? state.asset.toUpperCase();
+    note.textContent = s.fc
+      ? `La línea punteada muestra el recorrido estimado de ${assetName} a 48 h; no es una garantía.`
+      : 'El precio real sigue disponible. La línea punteada aparecerá cuando exista un pronóstico válido.';
   }
 
   svg.addEventListener('mousemove', (e) => {
@@ -162,9 +157,9 @@ export function initLikelyChart(root, { snapshot, histories }) {
     if (state.mode === 'candle') {
       if (i < s.NC) {
         const c = s.candles[i]; const up = c.c >= c.o; v = c.c; cls = up ? 'up' : 'down';
-        label = `<span class="d">${c.day} · O ${priceFmt.format(c.o)} C ${priceFmt.format(c.c)}<br>H ${priceFmt.format(c.h)} L ${priceFmt.format(c.l)}</span>`;
+        label = `<span class="d">${dayFmt.format(new Date(c.day))} · O ${priceFmt.format(c.o)} C ${priceFmt.format(c.c)}<br>H ${priceFmt.format(c.h)} L ${priceFmt.format(c.l)}</span>`;
       } else {
-        v = s.fc ? s.fc.prices[Math.min(s.fc.prices.length - 1, Math.round((i - s.NC + 1) * 6))] : s.candles.at(-1).c;
+        v = s.fc ? s.fc.prices[Math.min(s.fc.prices.length - 1, Math.round((i - s.NC + 1) * 6))] : s.candles.at(-1)?.c;
         label = '<span class="d fc">pronóstico</span>';
       }
     } else {
@@ -175,7 +170,7 @@ export function initLikelyChart(root, { snapshot, histories }) {
     if (typeof v !== 'number') return;
     const cx = s.X(i); const cy = s.Y(v);
     const cross = svg.querySelector('.lk-cross'); const dot = svg.querySelector('.lk-dot');
-    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.opacity = 0.6;
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.opacity = 0.55;
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.style.opacity = 1;
     tip.hidden = false;
     tip.innerHTML = `<b class="${cls}">${priceFmt.format(v)}</b>${label}`;
@@ -188,17 +183,21 @@ export function initLikelyChart(root, { snapshot, histories }) {
     if (c) c.style.opacity = 0; if (d) d.style.opacity = 0;
   });
 
-  root.querySelectorAll('.lk-tab').forEach((t) => t.addEventListener('click', () => {
-    root.querySelectorAll('.lk-tab').forEach((x) => x.classList.remove('active'));
-    t.classList.add('active'); state.asset = t.dataset.asset; draw(true);
+  container.querySelectorAll('.lk-mode').forEach((m) => m.addEventListener('click', () => {
+    container.querySelectorAll('.lk-mode').forEach((x) => { x.classList.remove('active'); x.removeAttribute('aria-selected'); });
+    m.classList.add('active'); m.setAttribute('aria-selected', 'true');
+    state.mode = m.dataset.mode; draw(true);
   }));
-  root.querySelectorAll('.lk-mode').forEach((m) => m.addEventListener('click', () => {
-    root.querySelectorAll('.lk-mode').forEach((x) => x.classList.remove('active'));
-    m.classList.add('active'); state.mode = m.dataset.mode; draw(true);
-  }));
-  root.querySelectorAll('.lk-chip').forEach((c) => c.addEventListener('click', () => {
-    state.showFc = !state.showFc; c.classList.toggle('on', state.showFc); draw(false);
-  }));
+  const fcBtn = container.querySelector('.lk-fc-toggle');
+  fcBtn.addEventListener('click', () => {
+    state.showFc = !state.showFc;
+    fcBtn.classList.toggle('on', state.showFc);
+    fcBtn.setAttribute('aria-pressed', String(state.showFc));
+    draw(false);
+  });
 
   draw(true);
+  return {
+    setAsset(asset) { state.asset = asset; draw(true); },
+  };
 }

@@ -6,12 +6,11 @@
 import {
   accuracyView,
   artifactGeneratedAt,
-  chartSeries,
   forecastView,
 } from './forecast-ui.js';
+import { mountLikelyChart } from './likely-chart.js';
 
 const TIMEZONE = 'America/Mexico_City';
-const CHART_JS_URL = '/js/vendor/chart.umd.js';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
 const STALE_AFTER_MS = 60 * 60 * 1000; // 4 missed runs: no longer "al día"
 const ANCHOR_TOLERANCE_MS = 2 * 60 * 60 * 1000; // max drift for the 24h anchor
@@ -25,8 +24,7 @@ const els = {
   change: document.getElementById('change'),
   lastUpdate: document.getElementById('last-update'),
   nextUpdate: document.getElementById('card-next-update'),
-  chartNote: document.getElementById('chart-note'),
-  forecastLegend: document.getElementById('forecast-legend'),
+  chartMount: document.getElementById('chart-mount'),
   predictionTitle: document.getElementById('prediction-title'),
   predictionBody: document.getElementById('prediction-body'),
   signalPanel: document.getElementById('signal-panel'),
@@ -47,26 +45,6 @@ const state = {
   chart: null,
 };
 
-let chartLibraryPromise = null;
-
-function loadChartLibrary() {
-  if (globalThis.Chart) return Promise.resolve(globalThis.Chart);
-  if (chartLibraryPromise) return chartLibraryPromise;
-
-  chartLibraryPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = CHART_JS_URL;
-    script.async = true;
-    script.onload = () => {
-      if (globalThis.Chart) resolve(globalThis.Chart);
-      else reject(new Error('Chart.js loaded without exposing Chart.'));
-    };
-    script.onerror = () => reject(new Error('Chart.js could not be loaded.'));
-    document.head.append(script);
-  });
-  return chartLibraryPromise;
-}
-
 const priceFmt = new Intl.NumberFormat('es-MX', {
   style: 'currency',
   currency: 'USD',
@@ -79,12 +57,6 @@ const timeFmt = new Intl.DateTimeFormat('es-MX', {
   month: 'short',
   hour: '2-digit',
   minute: '2-digit',
-});
-
-const dayFmt = new Intl.DateTimeFormat('es-MX', {
-  timeZone: TIMEZONE,
-  day: 'numeric',
-  month: 'short',
 });
 
 async function fetchJson(url) {
@@ -191,115 +163,6 @@ function renderPrice() {
   }
 }
 
-function renderChart() {
-  const history = state.history[state.asset];
-  if (!history?.points?.length || !globalThis.Chart) return;
-
-  const series = chartSeries(history, state.snapshot, state.asset);
-  const assetName = state.snapshot?.assets?.[state.asset]?.name ?? state.asset.toUpperCase();
-
-  if (state.chart) state.chart.destroy();
-  const styles = getComputedStyle(document.documentElement);
-  const accent = styles.getPropertyValue('--accent').trim();
-  const muted = styles.getPropertyValue('--muted').trim();
-  const grid = styles.getPropertyValue('--chart-grid').trim();
-  const surface = styles.getPropertyValue('--surface-raised').trim();
-  const text = styles.getPropertyValue('--text').trim();
-  const forecastColor = styles.getPropertyValue('--forecast').trim();
-
-  const datasets = [{
-    label: 'Precio real',
-    data: series.actual,
-    borderColor: accent,
-    backgroundColor: 'rgba(105, 230, 178, 0.06)',
-    borderWidth: 2.5,
-    fill: true,
-    pointRadius: 0,
-    tension: 0.2,
-    spanGaps: true, // tolerate ingestion gaps (R-11)
-  }];
-  if (series.forecast) {
-    datasets.push({
-      label: 'Pronóstico 48 h',
-      data: series.forecast,
-      borderColor: forecastColor,
-      backgroundColor: 'transparent',
-      borderWidth: 2,
-      borderDash: [6, 6],
-      fill: false,
-      pointRadius: 0,
-      pointHitRadius: 8,
-      tension: 0.24,
-      spanGaps: false,
-    });
-  }
-
-  els.forecastLegend.hidden = !series.forecast;
-  els.chartNote.textContent = series.forecast
-    ? `La línea punteada muestra el recorrido estimado para ${assetName}; no representa una garantía.`
-    : 'El precio real sigue disponible. Publicaremos la línea punteada cuando exista un pronóstico válido.';
-  const canvas = document.getElementById('chart');
-  canvas.setAttribute(
-    'aria-label',
-    series.forecast
-      ? `Precio real y pronóstico de 48 horas de ${assetName}`
-      : `Precio real de los últimos 30 días de ${assetName}`,
-  );
-
-  state.chart = new globalThis.Chart(canvas, {
-    type: 'line',
-    data: {
-      labels: series.labels,
-      datasets,
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      layout: { padding: { top: 8 } },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          backgroundColor: surface,
-          titleColor: muted,
-          bodyColor: text,
-          borderColor: grid,
-          borderWidth: 1,
-          padding: 12,
-          displayColors: false,
-          callbacks: {
-            title: (items) => `${timeFmt.format(new Date(items[0].label))} (CDMX)`,
-            label: (item) => `${item.dataset.label}: ${priceFmt.format(item.parsed.y)}`,
-          },
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: muted,
-            font: { size: 10 },
-            maxTicksLimit: 7,
-            callback(value) {
-              return dayFmt.format(new Date(this.getLabelForValue(value)));
-            },
-          },
-          border: { display: false },
-          grid: { display: false },
-        },
-        y: {
-          border: { display: false },
-          grid: { color: grid },
-          ticks: {
-            color: muted,
-            font: { size: 10 },
-            maxTicksLimit: 5,
-            callback: (value) => priceFmt.format(value),
-          },
-        },
-      },
-    },
-  });
-}
 
 function renderPrediction() {
   const view = forecastView(state.snapshot, state.asset);
@@ -357,7 +220,7 @@ function selectAsset(asset) {
   renderPrice();
   renderPrediction();
   renderAccuracy();
-  renderChart();
+  state.chart?.setAsset(asset);
 }
 
 function renderAccuracy() {
@@ -367,8 +230,6 @@ function renderAccuracy() {
 }
 
 async function init() {
-  const chartReady = loadChartLibrary().catch(() => null);
-
   for (const tab of els.tabs) {
     tab.addEventListener('click', () => selectAsset(tab.dataset.asset));
   }
@@ -384,17 +245,16 @@ async function init() {
     renderStatus(snapshot);
     selectAsset(state.asset);
 
-    const chartConstructor = await chartReady;
-    if (chartConstructor) {
-      try {
-        renderChart();
-      } catch {
-        els.chartNote.textContent =
-          'Los precios están disponibles, pero la gráfica no pudo cargarse en este momento.';
-      }
-    } else {
-      els.chartNote.textContent =
-        'Los precios están disponibles, pero la gráfica no pudo cargarse en este momento.';
+    // Mount the bespoke chart once the data is in; it is driven by the asset
+    // tabs through setAsset. A render failure must not break the price cards.
+    try {
+      state.chart = mountLikelyChart(els.chartMount, {
+        snapshot,
+        histories: state.history,
+      });
+      state.chart.setAsset(state.asset);
+    } catch (chartError) {
+      console.error(chartError);
     }
   } catch (error) {
     console.error(error);

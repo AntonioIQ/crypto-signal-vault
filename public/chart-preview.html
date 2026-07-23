@@ -51,7 +51,7 @@
     <div id="chart"></div>
   </div>
   <script type="module">
-    import { initLikelyChart } from './js/likely-chart.js';
+    import { mountLikelyChart } from './js/likely-chart.js';
     // Live API first (real data on the deploy), static seed as fallback.
     const load = async (live, seed) => {
       try { const r = await fetch(live); if (r.ok) return await r.json(); } catch { /* fall through */ }
@@ -62,7 +62,18 @@
       load('/api/history?asset=btc', 'data/history/btc.json'),
       load('/api/history?asset=eth', 'data/history/eth.json'),
     ]).then(([snapshot, btc, eth]) => {
-      initLikelyChart(document.getElementById('chart'), { snapshot, histories: { btc, eth } });
+      const mount = document.getElementById('chart');
+      const tabs = document.createElement('div');
+      tabs.className = 'lk-tabs';
+      tabs.innerHTML = '<button class="lk-tab active" data-a="btc">BTC</button><button class="lk-tab" data-a="eth">ETH</button>';
+      mount.before(tabs);
+      const chart = mountLikelyChart(mount, { snapshot, histories: { btc, eth } });
+      chart.setAsset('btc');
+      tabs.querySelectorAll('.lk-tab').forEach((t) => t.addEventListener('click', () => {
+        tabs.querySelectorAll('.lk-tab').forEach((x) => x.classList.remove('active'));
+        t.classList.add('active');
+        chart.setAsset(t.dataset.a);
+      }));
     });
   </script>
 </body>
