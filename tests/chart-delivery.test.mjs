@@ -8,7 +8,11 @@ import { test } from "node:test";
 test("no charting library is a project dependency", async () => {
   const packageJson = JSON.parse(await readFile("package.json", "utf8"));
   const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+  // The price chart is bespoke; only d3-force (physics for the scenario
+  // beeswarm) is a viz dependency, not a charting library.
   assert.equal(deps["chart.js"], undefined);
+  assert.equal(deps["d3"], undefined);
+  assert.equal(deps["d3-force"], "^3.0.0");
 });
 
 test("the chart module is self-contained and has no external hosts", async () => {
@@ -31,7 +35,15 @@ test("index.html declares a favicon and loads no chart script", async () => {
   assert.doesNotMatch(html, /<script[^>]+(?:chart|vendor)/i);
 });
 
-test("the build does not copy a vendored chart bundle", async () => {
+test("the build vendors d3-force locally and no Chart.js bundle", async () => {
   const build = await readFile("scripts/copy-data.mjs", "utf8");
-  assert.doesNotMatch(build, /chart\.umd|vendor/i);
+  assert.doesNotMatch(build, /chart\.umd/i);
+  assert.match(build, /d3-force/);
+});
+
+test("the scenario viz loads d3 from local vendor with no external hosts", async () => {
+  const viz = await readFile("public/js/scenario-viz.js", "utf8");
+  assert.match(viz, /export function mountScenarioViz/);
+  assert.match(viz, /\/js\/vendor\/\$\{module\}\.min\.js/);
+  assert.doesNotMatch(viz, /https?:\/\//i);
 });

@@ -9,6 +9,7 @@ import {
   forecastView,
 } from './forecast-ui.js';
 import { mountLikelyChart } from './likely-chart.js';
+import { mountScenarioViz } from './scenario-viz.js';
 
 const TIMEZONE = 'America/Mexico_City';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
@@ -25,6 +26,7 @@ const els = {
   lastUpdate: document.getElementById('last-update'),
   nextUpdate: document.getElementById('card-next-update'),
   chartMount: document.getElementById('chart-mount'),
+  scenarioMount: document.getElementById('scenario-mount'),
   predictionTitle: document.getElementById('prediction-title'),
   predictionBody: document.getElementById('prediction-body'),
   signalPanel: document.getElementById('signal-panel'),
@@ -221,6 +223,7 @@ function selectAsset(asset) {
   renderPrediction();
   renderAccuracy();
   state.chart?.setAsset(asset);
+  state.scenarios?.setAsset(asset);
 }
 
 function renderAccuracy() {
@@ -255,6 +258,13 @@ async function init() {
       state.chart.setAsset(state.asset);
     } catch (chartError) {
       console.error(chartError);
+    }
+
+    try {
+      state.scenarios = mountScenarioViz(els.scenarioMount, { snapshot });
+      state.scenarios.setAsset(state.asset);
+    } catch (scenarioError) {
+      console.error(scenarioError);
     }
   } catch (error) {
     console.error(error);

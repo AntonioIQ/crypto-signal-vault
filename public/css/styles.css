@@ -561,6 +561,78 @@ a {
   color: var(--chart-down);
 }
 
+/* Scenario distribution (public/js/scenario-viz.js) */
+.sv-head {
+  margin-top: 4px;
+}
+
+.sv-conf {
+  margin: 0;
+}
+
+.sv-value {
+  font-size: 2.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.sv-value.high { color: var(--accent); }
+.sv-value.mid { color: var(--forecast); }
+.sv-value.low { color: var(--chart-down); }
+
+.sv-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.sv-cw {
+  margin-top: 10px;
+}
+
+.sv-svg {
+  width: 100%;
+  height: 210px;
+  display: block;
+  overflow: visible;
+}
+
+.sv-axis {
+  stroke: rgba(199, 232, 219, 0.18);
+  stroke-width: 1;
+}
+
+.sv-thr {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  opacity: 0.5;
+}
+
+.sv-albl {
+  fill: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.sv-dot {
+  transition: cx 0.9s cubic-bezier(0.34, 1.1, 0.5, 1),
+    cy 0.9s cubic-bezier(0.34, 1.1, 0.5, 1), opacity 0.4s;
+}
+
+.sv-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.sv-note b {
+  color: var(--text);
+}
+
 .chart-note,
 .mini-disclaimer {
   margin: 14px 0 0;

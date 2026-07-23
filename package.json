@@ -10,7 +10,11 @@
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "@netlify/blobs": "10.0.8"
+    "@netlify/blobs": "10.0.8",
+    "d3-dispatch": "^3.0.1",
+    "d3-force": "^3.0.0",
+    "d3-quadtree": "^3.0.1",
+    "d3-timer": "^3.0.1"
   },
   "license": "MIT"
 }

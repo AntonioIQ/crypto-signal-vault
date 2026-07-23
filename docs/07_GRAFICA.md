@@ -18,9 +18,9 @@ Reemplazar la gráfica de Chart.js por un componente propio, más único y anima
 
 | # | Qué | Toca capa de datos | Estado |
 |---|---|---|---|
-| 1 | Gráfica Aurora (línea/velas/pronóstico/hover) | No | ◐ Componente listo; falta integrarla al dashboard |
+| 1 | Gráfica Aurora (línea/velas/pronóstico/hover) | No | ☑ Integrada al dashboard (`likely-chart.js`); Chart.js eliminado |
 | 1b | **Volumen** bajo el precio | Sí — dejar de descartar `total_volumes` de CoinGecko en `refresh-history` y agregarlo al contrato de histórico | ☐ Pendiente |
-| 2 | **Escenarios del modelo** (distribución bayesiana con `d3-force`) | Sí — `ml/train.py` debe exponer los residuales de validación en el artefacto | ☐ Pendiente |
+| 2 | **Escenarios del modelo** (distribución con `d3-force`) | Sí — `ml/train.py` expone los residuales | ☑ Hecho. `train.py` guarda `scenarios` en la confianza; `scenario-viz.js` los dibuja con d3-force (beeswarm por columnas → campana), fallback a dot-plot. En producción aparecen tras la próxima corrida de entrenamiento |
 
 ## Restricción de honestidad (lo que NO se hace)
 
