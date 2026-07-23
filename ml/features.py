@@ -99,9 +99,14 @@ def normalized_hourly_series(document: Any, expected_asset: str) -> list[PricePo
     observations: list[tuple[datetime, float]] = []
     for index, raw_point in enumerate(raw_points):
         try:
+            # `volume` is optional and additive (used only by the chart); the
+            # trainer ignores it but must accept points that carry it.
+            fields = {"timestamp", "price"}
+            if isinstance(raw_point, Mapping) and "volume" in raw_point:
+                fields = fields | {"volume"}
             point = _require_exact_fields(
                 raw_point,
-                {"timestamp", "price"},
+                fields,
                 f"history.points[{index}]",
             )
             timestamp = parse_aware_datetime(

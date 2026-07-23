@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-07-22 — Upgrade visual de la gráfica (rama, sin producción)
+
+Fase visual opcional tras cerrar 1–4. Antonio quiere una gráfica más única y animada. Explorado con demos interactivas: paletas, volumen, velas, y una distribución bayesiana de escenarios. Decisiones en `docs/07_GRAFICA.md`.
+
+**Construido (rama `feature/chart-upgrade`):** `public/js/likely-chart.js` — componente SVG a la medida (sin librería), paleta Aurora, modos Línea/Velas con OHLC diario real bucketeado del histórico horario, pronóstico punteado, hover con O·C·H·L. `public/chart-preview.html` lo monta con datos reales (pide `/api/latest` y `/api/history` en vivo, fallback al seed). Verificado local con datos reales de producción.
+
+**Honestidad:** se descartaron clusters/force-graphs/gráficas de palabras — LikelyCoin no tiene esos datos; pintarlos sería decoración, rompe la regla #3. Solo se visualiza lo que el modelo produce.
+
+**Pendiente:** integrar la gráfica al dashboard (reemplazar Chart.js), luego volumen (dejar de descartar `total_volumes`), luego escenarios bayesianos con `d3-force` (expone residuales en `train.py`). El deploy de producción (15 créditos) espera a que esté integrada; mientras, deploy previews gratis.
+
+**Nota operativa:** los servidores locales lanzados con `&` no sobreviven entre turnos; usar tareas en background reales o mostrar por `show_widget`.
+
+---
+
 ## 2026-07-21 — FASE 4 CERRADA ✅ — el chat está vivo
 
 **Revisión (Claude):** APTA PARA MERGE, sin bloqueantes ni mayores. Tres observaciones menores de conservadurismo (rate limit global cobra tokens a preguntas que no llegan al LLM; bytes como proxy de tokens; filtros de salida amplios) — todas seguras, no bloqueantes. El trabajo de Codex es de alta calidad, con 132 tests que cubren rechazo de asesoría, inyección de prompt, aislamiento de la key, CORS y rate limit.

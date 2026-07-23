@@ -142,23 +142,32 @@ def confidence_from_residuals(
         clean_residuals.append(float(residual))
 
     sample_size = len(clean_residuals)
+    # Each scenario is the emitted terminal return shifted by one out-of-sample
+    # residual: the exact distribution the confidence fraction is counted over.
+    # Exposing it (instead of discarding it) lets the UI show that distribution
+    # honestly rather than reconstruct a made-up shape.
+    scenarios = [
+        round(float(emitted_terminal_return) + residual, 6)
+        for residual in clean_residuals
+    ]
     if sample_size < MIN_CONFIDENCE_SAMPLES:
         return {
             "value": None,
             "status": "insufficient_validation",
             "method": CONFIDENCE_METHOD,
             "sample_size": sample_size,
+            "scenarios": scenarios,
         }
 
     matching = sum(
-        classify_direction(float(emitted_terminal_return) + residual) == direction
-        for residual in clean_residuals
+        classify_direction(scenario) == direction for scenario in scenarios
     )
     return {
         "value": round(100.0 * matching / sample_size, 1),
         "status": "available",
         "method": CONFIDENCE_METHOD,
         "sample_size": sample_size,
+        "scenarios": scenarios,
     }
 
 
@@ -426,12 +435,27 @@ def _artifact_datetime(value: Any, field: str) -> datetime:
 
 
 def _validate_confidence(value: Any, field: str) -> None:
-    confidence = _exact_object(value, {"value", "status", "method", "sample_size"}, field)
+    # `scenarios` is an optional, additive field: the validated shape stays
+    # exact so no other unknown key can slip in.
+    allowed = {"value", "status", "method", "sample_size"}
+    if isinstance(value, Mapping) and "scenarios" in value:
+        allowed = allowed | {"scenarios"}
+    confidence = _exact_object(value, allowed, field)
     if confidence["method"] != CONFIDENCE_METHOD:
         raise ArtifactValidationError(f"{field}.method must be {CONFIDENCE_METHOD!r}")
     sample_size = confidence["sample_size"]
     if isinstance(sample_size, bool) or not isinstance(sample_size, int) or sample_size < 0:
         raise ArtifactValidationError(f"{field}.sample_size must be a non-negative integer")
+    if "scenarios" in confidence:
+        scenarios = confidence["scenarios"]
+        if (
+            not isinstance(scenarios, list)
+            or len(scenarios) != sample_size
+            or not all(_is_finite_number(item) for item in scenarios)
+        ):
+            raise ArtifactValidationError(
+                f"{field}.scenarios must be a list of {sample_size} finite numbers"
+            )
     if sample_size < MIN_CONFIDENCE_SAMPLES:
         if confidence["status"] != "insufficient_validation" or confidence["value"] is not None:
             raise ArtifactValidationError(

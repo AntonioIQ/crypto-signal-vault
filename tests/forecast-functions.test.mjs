@@ -502,3 +502,20 @@ test("snapshot validator rejects leaked model internals and malformed public poi
     new Date(wrongTimezoneOffset.forecast.assets.btc.points[0].target_at).toISOString();
   assert.equal(isValidSnapshot(wrongTimezoneOffset), false);
 });
+
+test("confidence accepts an optional scenarios distribution and rejects a wrong length", () => {
+  const artifact = artifactFixture();
+  // btc sample_size is 40, eth is 12 in the fixture.
+  artifact.assets.btc.summary.confidence.scenarios = Array.from({ length: 40 }, (_, i) => 0.01 + i * 0.0001);
+  artifact.assets.eth.summary.confidence.scenarios = Array.from({ length: 12 }, () => -0.02);
+  assert.doesNotThrow(() => assertValidForecastArtifact(artifact));
+
+  // A scenarios array whose length does not match sample_size is rejected.
+  artifact.assets.btc.summary.confidence.scenarios = [0.01, 0.02];
+  assert.throws(() => assertValidForecastArtifact(artifact));
+
+  // A non-finite scenario is rejected.
+  const bad = artifactFixture();
+  bad.assets.btc.summary.confidence.scenarios = Array.from({ length: 40 }, (_, i) => (i === 0 ? Number.NaN : 0.01));
+  assert.throws(() => assertValidForecastArtifact(bad));
+});

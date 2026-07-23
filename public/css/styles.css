@@ -10,7 +10,8 @@
   --muted-strong: #b7c5c0;
   --accent: #69e6b2;
   --accent-bright: #b8ffdf;
-  --forecast: #d6f8e9;
+  --forecast: #b39dff;
+  --chart-down: #ff7a9c;
   --accent-ink: #052018;
   --up: #70edb8;
   --down: #ff918c;
@@ -398,45 +399,228 @@ a {
   align-items: center;
 }
 
-.chart-legends,
-.chart-legend {
+/* Bespoke chart component (public/js/likely-chart.js) */
+.lk-controls {
   display: flex;
   align-items: center;
-}
-
-.chart-legends {
-  gap: 18px;
+  gap: 10px;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  margin-top: 18px;
 }
 
-.chart-legend {
-  gap: 8px;
-  color: var(--muted);
-  font-size: 0.72rem;
-  white-space: nowrap;
+.lk-modes {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.22);
 }
 
-.chart-legend span {
-  width: 20px;
-  height: 2px;
-  background: var(--accent);
-}
-
-.forecast-legend span {
-  height: 0;
-  border-top: 2px dashed var(--forecast);
+.lk-mode {
+  border: 0;
   background: transparent;
+  color: var(--muted);
+  font: 600 0.8rem/1 inherit;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.16s, color 0.16s;
 }
 
-.forecast-legend[hidden] {
-  display: none;
+.lk-mode.active {
+  background: var(--forecast);
+  color: #160f2e;
 }
 
-.chart-wrap {
+.lk-fc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--muted);
+  font: 600 0.75rem/1 inherit;
+  padding: 6px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.16s, opacity 0.16s;
+}
+
+.lk-fc-toggle.on {
+  color: var(--text);
+}
+
+.lk-fc-toggle:not(.on) {
+  opacity: 0.5;
+}
+
+.lk-fc-sw {
+  width: 16px;
+  height: 0;
+  border-top: 2.5px dashed var(--forecast);
+}
+
+.lk-vol-sw {
+  width: 13px;
+  height: 9px;
+  background: var(--accent);
+  opacity: 0.5;
+  border-radius: 1px;
+}
+
+.lk-vol {
+  opacity: 0.3;
+  transition: opacity 0.35s;
+}
+
+.lk-cw {
   position: relative;
-  height: 318px;
-  margin-top: 20px;
+  height: 300px;
+  margin-top: 16px;
+}
+
+.lk-svg {
+  width: 100%;
+  height: 300px;
+  display: block;
+  overflow: visible;
+}
+
+.lk-grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.lk-real {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.lk-area {
+  fill: var(--accent);
+  opacity: 0.1;
+}
+
+.lk-fc {
+  fill: none;
+  stroke: var(--forecast);
+  stroke-width: 2.2;
+  stroke-dasharray: 6 6;
+  stroke-linecap: round;
+  transition: opacity 0.35s;
+}
+
+.lk-wick {
+  stroke-width: 1.3;
+}
+
+.lk-body {
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lk-cross {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0;
+}
+
+.lk-dot {
+  fill: var(--accent);
+  stroke: var(--bg);
+  stroke-width: 2;
+  opacity: 0;
+}
+
+.lk-tip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  transform: translate(-50%, -120%);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+
+.lk-tip .d {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.68rem;
+}
+
+.lk-tip .fc {
+  color: var(--forecast);
+}
+
+.lk-tip b.up {
+  color: var(--up);
+}
+
+.lk-tip b.down {
+  color: var(--chart-down);
+}
+
+/* Scenario distribution (public/js/scenario-viz.js) */
+.sv-head {
+  margin-top: 4px;
+}
+
+.sv-conf {
+  margin: 0;
+}
+
+.sv-value {
+  font-size: 2.1rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.sv-value.high { color: var(--accent); }
+.sv-value.mid { color: var(--forecast); }
+.sv-value.low { color: var(--chart-down); }
+
+.sv-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.sv-cw {
+  margin-top: 10px;
+  cursor: pointer;
+}
+
+.sv-canvas {
+  width: 100%;
+  height: 250px;
+  display: block;
+}
+
+.sv-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.sv-note b {
+  color: var(--text);
 }
 
 .chart-note,

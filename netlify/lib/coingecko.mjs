@@ -145,7 +145,11 @@ function validateMarketChartPayload(payload, coinId) {
     throw new TypeError(`CoinGecko market chart response is invalid for ${coinId}.`);
   }
 
-  const points = payload.prices.map((point) => {
+  // total_volumes is aligned with prices by index; capture it when present and
+  // valid, otherwise the point simply carries no volume (it stays optional).
+  const volumes = Array.isArray(payload.total_volumes) ? payload.total_volumes : [];
+
+  const points = payload.prices.map((point, index) => {
     if (
       !Array.isArray(point) ||
       point.length < 2 ||
@@ -157,10 +161,15 @@ function validateMarketChartPayload(payload, coinId) {
       );
     }
 
-    return {
+    const result = {
       timestamp: new Date(point[0]).toISOString(),
       price: point[1],
     };
+    const rawVolume = volumes[index]?.[1];
+    if (typeof rawVolume === "number" && Number.isFinite(rawVolume) && rawVolume >= 0) {
+      result.volume = rawVolume;
+    }
+    return result;
   });
 
   points.sort((left, right) => left.timestamp.localeCompare(right.timestamp));

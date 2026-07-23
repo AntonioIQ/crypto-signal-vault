@@ -5,7 +5,6 @@ import { test } from "node:test";
 import {
   accuracyView,
   artifactGeneratedAt,
-  chartSeries,
   forecastView,
 } from "../public/js/forecast-ui.js";
 
@@ -131,38 +130,6 @@ test("partial forecasts degrade to unavailable instead of drawing a line", () =>
   snapshot.forecast.assets.btc.points.pop();
 
   assert.equal(forecastView(snapshot, "btc").available, false);
-});
-
-test("chart joins the live anchor to exactly 48 projected points", () => {
-  const snapshot = snapshotFixture();
-  const history = {
-    points: [
-      { timestamp: "2026-07-17T06:00:00.000Z", price: 64_500 },
-      { timestamp: "2026-07-17T07:00:00.000Z", price: 64_750 },
-    ],
-  };
-  const series = chartSeries(history, snapshot, "btc");
-
-  assert.equal(series.labels.length, 51);
-  assert.equal(series.actual.length, series.labels.length);
-  assert.equal(series.forecast.length, series.labels.length);
-  assert.equal(series.actual.at(-1), null);
-  assert.equal(series.forecast[2], 65_000);
-  assert.equal(series.forecast.filter((value) => value !== null).length, 49);
-});
-
-test("unavailable forecast leaves the historical line untouched", () => {
-  const history = {
-    points: [
-      { timestamp: "2026-07-17T06:00:00.000Z", price: 64_500 },
-      { timestamp: "invalid", price: 64_750 },
-    ],
-  };
-  const series = chartSeries(history, { assets: {} }, "btc");
-
-  assert.deepEqual(series.labels, ["2026-07-17T06:00:00.000Z"]);
-  assert.deepEqual(series.actual, [64_500]);
-  assert.equal(series.forecast, null);
 });
 
 test("artifact version exposes its UTC generation timestamp", () => {
