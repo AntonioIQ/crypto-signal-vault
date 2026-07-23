@@ -19,7 +19,7 @@ Reemplazar la gráfica de Chart.js por un componente propio, más único y anima
 | # | Qué | Toca capa de datos | Estado |
 |---|---|---|---|
 | 1 | Gráfica Aurora (línea/velas/pronóstico/hover) | No | ☑ Integrada al dashboard (`likely-chart.js`); Chart.js eliminado |
-| 1b | **Volumen** bajo el precio | Sí — dejar de descartar `total_volumes` de CoinGecko en `refresh-history` y agregarlo al contrato de histórico | ☐ Pendiente |
+| 1b | **Volumen** bajo el precio | Sí — capturar `total_volumes` de CoinGecko (opcional por punto en el contrato de histórico) | ☑ Hecho. `coingecko.mjs` guarda el volumen; `market-contract` lo valida como campo opcional del punto; `features.py` lo acepta e ignora; la gráfica dibuja las barras con toggle. En producción aparece tras la próxima corrida de `refresh-history` (cada 6h) |
 | 2 | **Escenarios del modelo** (tablero de Galton en canvas) | Sí — `ml/train.py` expone los residuales | ☑ Hecho. `train.py` guarda `scenarios` en la confianza; `scenario-viz.js` los anima como un tablero de Galton **en canvas** (cada bola cae en el bin de su escenario real → la campana honesta, sin librería). En producción aparecen tras la próxima corrida de entrenamiento |
 
 ## Restricción de honestidad (lo que NO se hace)

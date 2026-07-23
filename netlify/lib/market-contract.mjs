@@ -250,7 +250,13 @@ export function isValidHistoryDocument(document, expectedAsset) {
 
   return document.points.every(
     (point) =>
-      isRecord(point) && isIsoTimestamp(point.timestamp) && isPositiveNumber(point.price),
+      isRecord(point) &&
+      isIsoTimestamp(point.timestamp) &&
+      isPositiveNumber(point.price) &&
+      // volume is optional and additive; when present it must be a finite,
+      // non-negative number.
+      (!Object.hasOwn(point, "volume") ||
+        (typeof point.volume === "number" && Number.isFinite(point.volume) && point.volume >= 0)),
   );
 }
 
@@ -270,7 +276,11 @@ export function createHistoryDocument({ asset, points, generatedAt = new Date() 
       throw new ContractValidationError(`History contains an invalid ${asset} point.`);
     }
 
-    return { timestamp: point.timestamp, price: point.price };
+    const normalized = { timestamp: point.timestamp, price: point.price };
+    if (typeof point.volume === "number" && Number.isFinite(point.volume) && point.volume >= 0) {
+      normalized.volume = point.volume;
+    }
+    return normalized;
   });
 
   normalizedPoints.sort((left, right) =>

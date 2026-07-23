@@ -462,6 +462,19 @@ a {
   border-top: 2.5px dashed var(--forecast);
 }
 
+.lk-vol-sw {
+  width: 13px;
+  height: 9px;
+  background: var(--accent);
+  opacity: 0.5;
+  border-radius: 1px;
+}
+
+.lk-vol {
+  opacity: 0.3;
+  transition: opacity 0.35s;
+}
+
 .lk-cw {
   position: relative;
   height: 300px;

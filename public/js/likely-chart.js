@@ -22,13 +22,20 @@ function toCandles(points) {
   for (const p of points) {
     if (typeof p?.price !== 'number' || typeof p?.timestamp !== 'string') continue;
     const day = p.timestamp.slice(0, 10);
-    if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day).push(p.price);
+    if (!byDay.has(day)) byDay.set(day, { prices: [], volume: 0, hasVolume: false });
+    const bucket = byDay.get(day);
+    bucket.prices.push(p.price);
+    if (typeof p.volume === 'number' && Number.isFinite(p.volume)) {
+      bucket.volume += p.volume;
+      bucket.hasVolume = true;
+    }
   }
   return [...byDay.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([day, ps]) => ({
-      day, o: ps[0], c: ps[ps.length - 1], h: Math.max(...ps), l: Math.min(...ps),
+    .map(([day, b]) => ({
+      day, o: b.prices[0], c: b.prices[b.prices.length - 1],
+      h: Math.max(...b.prices), l: Math.min(...b.prices),
+      volume: b.hasVolume ? b.volume : null,
     }));
 }
 
@@ -49,7 +56,8 @@ export function mountLikelyChart(container, { snapshot, histories }) {
         <button class="lk-mode" data-mode="line" role="tab">Línea</button>
         <button class="lk-mode active" data-mode="candle" role="tab" aria-selected="true">Velas</button>
       </div>
-      <button class="lk-fc-toggle on" aria-pressed="true"><span class="lk-fc-sw"></span>Pronóstico 48 h</button>
+      <button class="lk-fc-toggle on" data-toggle="fc" aria-pressed="true"><span class="lk-fc-sw"></span>Pronóstico 48 h</button>
+      <button class="lk-fc-toggle lk-vol-toggle on" data-toggle="vol" aria-pressed="true"><span class="lk-vol-sw"></span>Volumen</button>
     </div>
     <div class="lk-cw">
       <svg class="lk-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Gráfica de precio y pronóstico"></svg>
@@ -60,7 +68,7 @@ export function mountLikelyChart(container, { snapshot, histories }) {
   const svg = container.querySelector('.lk-svg');
   const tip = container.querySelector('.lk-tip');
   const note = container.querySelector('.lk-note');
-  const state = { asset: 'btc', mode: 'candle', showFc: true };
+  const state = { asset: 'btc', mode: 'candle', showFc: true, showVol: true };
 
   function scales() {
     const hist = histories[state.asset]?.points ?? [];
@@ -79,11 +87,24 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     const hi = Math.max(...prices) * 1.005;
     const iw = W - PAD.l - PAD.r;
     const total = state.mode === 'candle' ? NC + fcN / 6 : NH + fcN;
+
+    const hasVolume = hist.some((p) => typeof p.volume === 'number');
+    const showVolBand = state.showVol && hasVolume;
+    const priceH = showVolBand ? 190 : PRICE_H;
+    const volTop = PAD.t + priceH + 14;
+    const volH = showVolBand ? H - volTop - 2 : 0;
+    const maxVol = showVolBand
+      ? Math.max(1, ...(state.mode === 'candle'
+        ? candles.map((c) => c.volume ?? 0)
+        : hist.map((p) => p.volume ?? 0)))
+      : 1;
+
     return {
-      hist, candles, fc, NH, NC, fcN, lo,
+      hist, candles, fc, NH, NC, fcN, lo, total, hasVolume, showVolBand,
+      priceH, volTop, volH, maxVol,
       X: (i) => PAD.l + (i / (total - 1)) * iw,
-      Y: (v) => PAD.t + PRICE_H - ((v - lo) / (hi - lo)) * PRICE_H,
-      total,
+      Y: (v) => PAD.t + priceH - ((v - lo) / (hi - lo)) * priceH,
+      VY: (vol) => volTop + volH - (vol / maxVol) * volH,
     };
   }
 
@@ -94,7 +115,7 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     const { X, Y, lo } = s;
     let grid = '';
     for (let g = 0; g <= 3; g += 1) {
-      const y = PAD.t + (PRICE_H / 3) * g;
+      const y = PAD.t + (s.priceH / 3) * g;
       grid += `<line class="lk-grid" x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}"/>`;
     }
     let body = '';
@@ -121,8 +142,30 @@ export function mountLikelyChart(container, { snapshot, histories }) {
         body += `<path class="lk-fc" d="${fp}"/>`;
       }
     }
-    svg.innerHTML = `${grid}${body}
-      <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + PRICE_H}"/>
+    let vol = '';
+    if (s.showVolBand) {
+      const baseY = s.volTop + s.volH;
+      if (state.mode === 'candle') {
+        const cw = (W - PAD.l - PAD.r) / s.total * 0.6;
+        s.candles.forEach((c, i) => {
+          if (c.volume == null) return;
+          const col = c.c >= c.o ? 'var(--accent)' : 'var(--chart-down)';
+          const y = s.VY(c.volume);
+          vol += `<rect class="lk-vol" x="${(X(i) - cw / 2).toFixed(1)}" width="${cw.toFixed(1)}" y="${y.toFixed(1)}" height="${Math.max(1, baseY - y).toFixed(1)}" fill="${col}"/>`;
+        });
+      } else {
+        const bw = Math.max(1, (W - PAD.l - PAD.r) / s.NH * 0.55);
+        s.hist.forEach((p, i) => {
+          if (typeof p.volume !== 'number') return;
+          const col = i > 0 && p.price < s.hist[i - 1].price ? 'var(--chart-down)' : 'var(--accent)';
+          const y = s.VY(p.volume);
+          vol += `<rect class="lk-vol" x="${(X(i) - bw / 2).toFixed(1)}" width="${bw.toFixed(1)}" y="${y.toFixed(1)}" height="${Math.max(0.5, baseY - y).toFixed(1)}" fill="${col}"/>`;
+        });
+      }
+    }
+
+    svg.innerHTML = `${grid}${vol}${body}
+      <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + s.priceH}"/>
       <circle class="lk-dot" r="4"/>`;
 
     if (animate) {
@@ -188,13 +231,13 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     m.classList.add('active'); m.setAttribute('aria-selected', 'true');
     state.mode = m.dataset.mode; draw(true);
   }));
-  const fcBtn = container.querySelector('.lk-fc-toggle');
-  fcBtn.addEventListener('click', () => {
-    state.showFc = !state.showFc;
-    fcBtn.classList.toggle('on', state.showFc);
-    fcBtn.setAttribute('aria-pressed', String(state.showFc));
+  container.querySelectorAll('[data-toggle]').forEach((btn) => btn.addEventListener('click', () => {
+    const key = btn.dataset.toggle === 'vol' ? 'showVol' : 'showFc';
+    state[key] = !state[key];
+    btn.classList.toggle('on', state[key]);
+    btn.setAttribute('aria-pressed', String(state[key]));
     draw(false);
-  });
+  }));
 
   draw(true);
   return {
