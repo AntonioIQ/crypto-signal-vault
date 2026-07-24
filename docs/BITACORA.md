@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-07-23 — Upgrade visual EN PRODUCCIÓN (merge + train)
+
+Cierre del upgrade visual. Antonio eligió **mergear directo a producción** (sin revisión externa). Secuencia "volumen + producción" completa: merge de `feature/chart-upgrade` → `main` (`112f09b`, 1 deploy = 15 créditos), corrida de `train.py` que activó los escenarios reales, `predict` que ancló el artefacto. Verificado en vivo: tablero de Galton mostrando **40 de 40 escenarios reales apuntando a subida (100%)**, canvas presente, cero errores en consola. **Volumen aún en 0** en `/api/history` de producción — aparece solo tras la próxima corrida de `refresh-history` (cada 6h); no requiere acción.
+
+Contratos aditivos: `confidence.scenarios` (opcional) y `volume` por punto (opcional). Suites en verde: 134 Node + 39 Python.
+
 ## 2026-07-22 — Upgrade visual de la gráfica (rama, sin producción)
 
 Fase visual opcional tras cerrar 1–4. Antonio quiere una gráfica más única y animada. Explorado con demos interactivas: paletas, volumen, velas, y una distribución bayesiana de escenarios. Decisiones en `docs/07_GRAFICA.md`.

@@ -2,11 +2,17 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-21 20:05 (hora CDMX)
+**Última actualización**: 2026-07-23 09:50 (hora CDMX)
 
-> ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Quedan ~16 deploys en el ciclo (expira 31 jul). Nada mutable se commitea; batchea los pushes.
+> ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — FASE 4 CERRADA ✅ (2026-07-21); el chat está VIVO en producción
+## Fase activa: ninguna — UPGRADE VISUAL EN PRODUCCIÓN ✅ (2026-07-23); Fases 1–4 cerradas
+
+### Upgrade visual — EN PRODUCCIÓN (`07_GRAFICA.md`)
+
+Gráfica propia (sin librería) reemplazó a Chart.js; distribución de escenarios (tablero de Galton en canvas); volumen. Mergeado a `main` (`112f09b`, 1 deploy). `train.py` corrido → `/api/latest` ya trae `scenarios` (40 por activo) → el tablero de Galton está **vivo con datos reales** (Prophet). **Volumen**: aparece tras la próxima corrida de `refresh-history` (cada 6h) — hasta entonces la gráfica funciona sin barras. Sin revisión externa (Antonio eligió mergear directo). Contratos tocados: `scenarios` (opcional en confidence) y `volume` (opcional en punto de histórico), ambos aditivos.
+
+### FASE 4 — Analista · «el chat» — CERRADA
 
 ### FASE 4 — Analista · «el chat» — CERRADA
 

@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## Upgrade visual de la gráfica — EN PRODUCCIÓN 2026-07-23
+
+**Entregable**: gráfica propia (sin librería) que reemplaza a Chart.js + distribución de escenarios del modelo, vivas en `https://likelycoin.netlify.app`.
+
+- **Gráfica Aurora** (`public/js/likely-chart.js`): SVG a la medida, modos Línea/Velas (OHLC diario real bucketeado del histórico horario), pronóstico punteado, toggles de pronóstico y volumen, hover O·C·H·L. Chart.js eliminado del proyecto.
+- **Escenarios del modelo** (`public/js/scenario-viz.js`): tablero de Galton en `<canvas>`; cada pelota es un escenario de validación *real* (residual rolling-origin de `train.py`) que cae en el bin de su valor y apila la distribución verdadera — no azar. Estado honesto si no hay escenarios.
+- **Datos**: `train.py` ahora expone `confidence.scenarios` (40 por activo, aditivo/opcional). CoinGecko captura `total_volumes` → `volume` opcional en cada punto de histórico.
+- **Costo**: 1 production deploy (15 créditos). Sin revisión externa (merge directo a `main`, `112f09b`). Contratos tocados son aditivos; fixtures previas siguen válidas.
+- **Pendiente automático**: las barras de volumen aparecen tras la primera corrida de `refresh-history` (cada 6h) que reescriba `/api/history` con `volume`.
+
 ## Fase 4 — Analista · «el chat» — CERRADA 2026-07-21
 
 **Entregable**: el chat "Pregúntale a tu analista" vivo en `https://likelycoin.netlify.app`, respondiendo con los datos propios del modelo, en español simple, y rechazando dar asesoría de inversión. Costo de operación: $0 (Groq free tier, sin tarjeta).
