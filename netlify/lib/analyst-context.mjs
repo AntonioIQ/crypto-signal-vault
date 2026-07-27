@@ -57,7 +57,7 @@ export function buildAnalystContext(snapshot) {
     timezone: snapshot.timezone,
     stale: snapshot.stale,
     assets: Object.fromEntries(
-      ["btc", "eth"].map((asset) => {
+      Object.keys(snapshot.assets).map((asset) => {
         const market = snapshot.assets[asset];
         return [
           asset,

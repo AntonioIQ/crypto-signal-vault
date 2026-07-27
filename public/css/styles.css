@@ -207,6 +207,10 @@ a {
   border: 1px solid var(--border);
   border-radius: 14px;
   background: rgba(12, 24, 21, 0.72);
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scroll-snap-type: x proximity;
 }
 
 .tab {
@@ -214,7 +218,9 @@ a {
   grid-template-columns: auto 1fr;
   gap: 10px;
   align-items: center;
-  min-width: 140px;
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+  min-width: 122px;
   padding: 10px 14px 10px 10px;
   border: 0;
   border-radius: 10px;
@@ -244,14 +250,16 @@ a {
 .tab-symbol {
   display: grid;
   place-items: center;
-  width: 37px;
+  min-width: 37px;
   height: 34px;
+  padding: 0 6px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   color: var(--muted);
   font-size: 0.65rem;
   font-weight: 800;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .tab.active .tab-symbol {
@@ -473,6 +481,79 @@ a {
 .lk-vol {
   opacity: 0.3;
   transition: opacity 0.35s;
+}
+
+.lk-rng-toggle .lk-vol-sw {
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  opacity: 0.7;
+}
+
+/* When comparing BTC vs ETH the per-asset toggles don't apply. */
+.lk-compare .lk-fc-toggle {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+/* 24h stats strip (line/candle) or 30d performance (compare). */
+.lk-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+  min-height: 20px;
+}
+
+.lk-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 0.78rem;
+}
+
+.lk-chip-k {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.lk-chip-v {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.lk-chip-v.up {
+  color: var(--accent);
+}
+
+.lk-chip-v.down {
+  color: var(--chart-down);
+}
+
+/* Daily high-low volatility band. */
+.lk-band {
+  fill: var(--accent);
+  opacity: 0.12;
+  stroke: none;
+}
+
+/* Compare mode. */
+.lk-base {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.lk-cmp {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
 .lk-cw {
@@ -1027,7 +1108,7 @@ a {
   }
 
   .asset-tabs {
-    width: fit-content;
+    max-width: 100%;
   }
 
   .dashboard-grid {
@@ -1102,8 +1183,7 @@ a {
   }
 
   .tab {
-    min-width: 0;
-    width: 50%;
+    min-width: 112px;
     padding-right: 10px;
   }
 

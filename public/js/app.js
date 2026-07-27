@@ -10,6 +10,7 @@ import {
 } from './forecast-ui.js';
 import { mountLikelyChart } from './likely-chart.js';
 import { mountScenarioViz } from './scenario-viz.js';
+import { fmtPrice } from './format.js';
 
 const TIMEZONE = 'America/Mexico_City';
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // predict.mjs schedule in netlify.toml
@@ -37,21 +38,16 @@ const els = {
   trainedStatus: document.getElementById('card-trained-status'),
   accuracy: document.getElementById('card-accuracy'),
   accuracyStatus: document.getElementById('card-accuracy-status'),
-  tabs: [...document.querySelectorAll('.tab')],
+  assetTabs: document.getElementById('asset-tabs'),
+  tabs: [],
 };
 
 const state = {
   asset: 'btc',
   snapshot: null,
-  history: {}, // asset -> history document
+  history: {}, // asset -> history document (loaded lazily, cached)
   chart: null,
 };
-
-const priceFmt = new Intl.NumberFormat('es-MX', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-});
 
 const timeFmt = new Intl.DateTimeFormat('es-MX', {
   timeZone: TIMEZONE,
@@ -148,7 +144,7 @@ function renderPrice() {
   // Live price when available; otherwise last history point (labeled stale upstream).
   const lastPoint = history?.points?.at(-1) ?? null;
   const price = asset?.price ?? lastPoint?.price ?? null;
-  els.price.textContent = price === null ? 'Sin datos' : priceFmt.format(price);
+  els.price.textContent = price === null ? 'Sin datos' : fmtPrice(price);
 
   // The change must be anchored to whichever price we actually display.
   const priceAsOf = asset?.price != null
@@ -212,12 +208,41 @@ function renderPrediction() {
   els.trainedStatus.textContent = view.status === 'fresh' ? 'MODELO AL DÍA' : 'MODELO POR ACTUALIZAR';
 }
 
-function selectAsset(asset) {
+// Tabs are built from the assets the snapshot actually carries, so adding a
+// coin to the backend config surfaces it here with no HTML change.
+function buildTabs(assets) {
+  els.assetTabs.innerHTML = '';
+  els.tabs = Object.entries(assets).map(([asset, meta]) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.type = 'button';
+    btn.setAttribute('role', 'tab');
+    btn.setAttribute('aria-selected', 'false');
+    btn.dataset.asset = asset;
+    btn.innerHTML =
+      `<span class="tab-symbol">${meta.symbol ?? asset.toUpperCase()}</span>` +
+      `<span>${meta.name ?? asset.toUpperCase()}</span>`;
+    btn.addEventListener('click', () => { selectAsset(asset); });
+    els.assetTabs.appendChild(btn);
+    return btn;
+  });
+}
+
+async function selectAsset(asset) {
   state.asset = asset;
   for (const tab of els.tabs) {
     const active = tab.dataset.asset === asset;
     tab.classList.toggle('active', active);
     tab.setAttribute('aria-selected', String(active));
+  }
+  // History is fetched on demand and cached; the chart holds the same object
+  // reference, so a newly loaded asset becomes visible to it immediately.
+  if (!state.history[asset]) {
+    try {
+      state.history[asset] = await loadHistory(asset);
+    } catch (error) {
+      console.error(error);
+    }
   }
   renderPrice();
   renderPrediction();
@@ -233,20 +258,23 @@ function renderAccuracy() {
 }
 
 async function init() {
-  for (const tab of els.tabs) {
-    tab.addEventListener('click', () => selectAsset(tab.dataset.asset));
-  }
-
   try {
-    const [snapshot, btc, eth] = await Promise.all([
-      loadSnapshot(),
-      loadHistory('btc'),
-      loadHistory('eth'),
-    ]);
+    const snapshot = await loadSnapshot();
     state.snapshot = snapshot;
-    state.history = { btc, eth };
+    const assets = Object.keys(snapshot.assets ?? {});
+    state.asset = assets.includes('btc') ? 'btc' : assets[0];
+    buildTabs(snapshot.assets ?? {});
     renderStatus(snapshot);
-    selectAsset(state.asset);
+
+    // btc and eth load up front: they are the default view and the fixed
+    // benchmarks for the chart's "BTC vs ETH" compare mode. Every other coin's
+    // history is fetched the first time its tab is opened.
+    const [btc, eth] = await Promise.all([
+      loadHistory('btc').catch(() => null),
+      loadHistory('eth').catch(() => null),
+    ]);
+    if (btc) state.history.btc = btc;
+    if (eth) state.history.eth = eth;
 
     // Mount the bespoke chart once the data is in; it is driven by the asset
     // tabs through setAsset. A render failure must not break the price cards.
@@ -255,17 +283,17 @@ async function init() {
         snapshot,
         histories: state.history,
       });
-      state.chart.setAsset(state.asset);
     } catch (chartError) {
       console.error(chartError);
     }
 
     try {
       state.scenarios = mountScenarioViz(els.scenarioMount, { snapshot });
-      state.scenarios.setAsset(state.asset);
     } catch (scenarioError) {
       console.error(scenarioError);
     }
+
+    await selectAsset(state.asset);
   } catch (error) {
     console.error(error);
     setStatus('error', 'No se pudieron cargar los datos. Intenta de nuevo en unos minutos.');

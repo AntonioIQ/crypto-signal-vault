@@ -5,16 +5,17 @@ export const COINGECKO_MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 250;
 
 export const ASSETS = Object.freeze({
-  btc: Object.freeze({
-    id: "bitcoin",
-    symbol: "BTC",
-    name: "Bitcoin",
-  }),
-  eth: Object.freeze({
-    id: "ethereum",
-    symbol: "ETH",
-    name: "Ethereum",
-  }),
+  btc: Object.freeze({ id: "bitcoin", symbol: "BTC", name: "Bitcoin" }),
+  eth: Object.freeze({ id: "ethereum", symbol: "ETH", name: "Ethereum" }),
+  bnb: Object.freeze({ id: "binancecoin", symbol: "BNB", name: "BNB" }),
+  xrp: Object.freeze({ id: "ripple", symbol: "XRP", name: "XRP" }),
+  sol: Object.freeze({ id: "solana", symbol: "SOL", name: "Solana" }),
+  trx: Object.freeze({ id: "tron", symbol: "TRX", name: "TRON" }),
+  doge: Object.freeze({ id: "dogecoin", symbol: "DOGE", name: "Dogecoin" }),
+  ada: Object.freeze({ id: "cardano", symbol: "ADA", name: "Cardano" }),
+  link: Object.freeze({ id: "chainlink", symbol: "LINK", name: "Chainlink" }),
+  hype: Object.freeze({ id: "hyperliquid", symbol: "HYPE", name: "Hyperliquid" }),
+  cheems: Object.freeze({ id: "cheems-token", symbol: "CHEEMS", name: "Cheems" }),
 });
 
 const SUPPORTED_COIN_IDS = new Set(

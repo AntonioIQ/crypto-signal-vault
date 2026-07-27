@@ -4,7 +4,10 @@ import {
 } from "./analyst-context.mjs";
 
 export const ANALYST_PROMPT_VERSION = "analyst-system/1.0";
-export const MAX_ANALYST_SYSTEM_PROMPT_BYTES = 2_200;
+// The context carries one compact block per configured asset, so this envelope
+// scales with the number of coins. At 11 assets a full context is ~5.3 KB
+// (~1.3k tokens); 7 KB leaves headroom without letting the prompt balloon.
+export const MAX_ANALYST_SYSTEM_PROMPT_BYTES = 7_000;
 
 export const ANALYST_SYSTEM_PROMPT = `Eres "el Analista" de Crypto Signal Vault. Respondes SOLO con base en el
 CONTEXTO proporcionado (predicción actual, métricas del modelo, precisión

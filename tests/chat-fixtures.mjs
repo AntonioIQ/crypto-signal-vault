@@ -2,6 +2,7 @@ import {
   createFreshSnapshot,
   formatMexicoCityTimestamp,
 } from "../netlify/lib/market-contract.mjs";
+import { fillPrices, fillArtifactAssets, fillAccuracyAssets } from "./asset-fixtures.mjs";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const ANCHORED_AT = new Date("2026-07-21T12:00:00-06:00");
@@ -32,42 +33,54 @@ export function chatSnapshot() {
     expires_at: formatMexicoCityTimestamp(
       new Date(ANCHORED_AT.getTime() + 72 * HOUR_MS),
     ),
-    assets: {
-      btc: forecastAsset({
-        price: 65_000,
-        terminalReturn: 0.018,
+    assets: fillArtifactAssets(
+      {
+        btc: forecastAsset({
+          price: 65_000,
+          terminalReturn: 0.018,
+          confidence: {
+            value: 72.5,
+            status: "available",
+            method: "rolling_origin_48h_residuals",
+            sample_size: 40,
+          },
+        }),
+        eth: forecastAsset({
+          price: 3_500,
+          terminalReturn: -0.007,
+          confidence: {
+            value: null,
+            status: "insufficient_validation",
+            method: "rolling_origin_48h_residuals",
+            sample_size: 12,
+          },
+        }),
+      },
+      () => forecastAsset({
+        price: 100,
+        terminalReturn: 0.01,
         confidence: {
-          value: 72.5,
+          value: 55,
           status: "available",
           method: "rolling_origin_48h_residuals",
-          sample_size: 40,
+          sample_size: 30,
         },
       }),
-      eth: forecastAsset({
-        price: 3_500,
-        terminalReturn: -0.007,
-        confidence: {
-          value: null,
-          status: "insufficient_validation",
-          method: "rolling_origin_48h_residuals",
-          sample_size: 12,
-        },
-      }),
-    },
+    ),
   };
   const accuracy = {
     status: "available",
     window_days: 7,
     measured_through: "2026-07-21T11:30:00-06:00",
-    assets: {
+    assets: fillAccuracyAssets({
       btc: { status: "available", hit_rate: 58.3, sample_size: 96 },
       eth: { status: "insufficient_data", hit_rate: null, sample_size: 11 },
-    },
+    }),
   };
-  const prices = {
+  const prices = fillPrices({
     btc: { price: 65_000, sourceUpdatedAt: "2026-07-21T17:59:00.000Z" },
     eth: { price: 3_500, sourceUpdatedAt: "2026-07-21T17:59:00.000Z" },
-  };
+  });
   return createFreshSnapshot(prices, ANCHORED_AT, forecast, accuracy);
 }
 

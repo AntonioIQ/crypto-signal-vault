@@ -10,11 +10,12 @@ import {
   createHistoryDocument,
   isValidSnapshot,
 } from '../netlify/lib/market-contract.mjs';
+import { fillPrices } from './asset-fixtures.mjs';
 
-const SAMPLE_PRICES = {
+const SAMPLE_PRICES = fillPrices({
   btc: { price: 65000.25, sourceUpdatedAt: '2026-07-15T17:59:31.000Z' },
   eth: { price: 1900.5, sourceUpdatedAt: '2026-07-15T17:59:31.000Z' },
-};
+});
 
 test('seed snapshot is valid and stale with null prices', () => {
   const seed = createSeedSnapshot();

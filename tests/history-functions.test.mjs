@@ -12,6 +12,7 @@ import {
   createHistoryDocument,
   isValidHistoryDocument,
 } from '../netlify/lib/market-contract.mjs';
+import { ASSETS } from '../netlify/lib/coingecko.mjs';
 
 const POINTS = [
   { timestamp: '2026-07-15T01:00:00.000Z', price: 64000 },
@@ -46,7 +47,12 @@ test('refresh stores a 30-day window per asset', async () => {
 
   assert.equal(results.btc.status, 'refreshed');
   assert.equal(results.eth.status, 'refreshed');
-  assert.deepEqual(calls.sort(), [['bitcoin', HISTORY_DAYS], ['ethereum', HISTORY_DAYS]]);
+  assert.deepEqual(
+    calls.sort(),
+    Object.values(ASSETS)
+      .map((meta) => [meta.id, HISTORY_DAYS])
+      .sort(),
+  );
   assert.ok(isValidHistoryDocument(store.blobs.get(historyKey('btc')), 'btc'));
   assert.ok(isValidHistoryDocument(store.blobs.get(historyKey('eth')), 'eth'));
 });
@@ -128,7 +134,7 @@ test('GET /api/history 404s on a corrupt blob rather than serving it', async () 
 test('GET /api/history rejects an unknown or missing asset', async () => {
   const handler = createHistoryHandler({ getStoreFn: () => makeStore() });
   assert.equal(
-    (await handler(new Request('http://localhost/api/history?asset=doge'))).status,
+    (await handler(new Request('http://localhost/api/history?asset=notacoin'))).status,
     400,
   );
   assert.equal((await handler(new Request('http://localhost/api/history'))).status, 400);

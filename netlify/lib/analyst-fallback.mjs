@@ -10,7 +10,11 @@ export const ANALYST_INTENTS = Object.freeze({
   EXPLANATION: "explanation",
 });
 
-const ASSET_LABELS = Object.freeze({ btc: "Bitcoin", eth: "Ethereum" });
+import { ASSETS } from "./coingecko.mjs";
+
+const ASSET_LABELS = Object.freeze(
+  Object.fromEntries(Object.entries(ASSETS).map(([asset, meta]) => [asset, meta.name])),
+);
 
 function normalized(text) {
   return text
@@ -136,8 +140,13 @@ function accuracySummary(context) {
 function requestedAssets(text) {
   const plain = normalized(text);
   const assets = [];
-  if (/\b(?:btc|bitcoin)\b/.test(plain)) assets.push("btc");
-  if (/\b(?:eth|ethereum)\b/.test(plain)) assets.push("eth");
+  for (const [asset, meta] of Object.entries(ASSETS)) {
+    const terms = [asset, meta.symbol, meta.id, meta.name]
+      .map((term) => normalized(term))
+      .filter((term) => term.length > 0);
+    const pattern = new RegExp(`\\b(?:${terms.join("|")})\\b`);
+    if (pattern.test(plain)) assets.push(asset);
+  }
   return assets.length > 0 ? assets : ["btc", "eth"];
 }
 

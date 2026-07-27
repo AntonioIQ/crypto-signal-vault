@@ -21,11 +21,12 @@ import {
   runPrediction,
 } from "../netlify/functions/predict.mjs";
 import { PREDICTIONS_STORE } from "../netlify/lib/prediction-contract.mjs";
+import { fillPrices, fillArtifactAssets } from "./asset-fixtures.mjs";
 
-const SAMPLE_PRICES = {
+const SAMPLE_PRICES = fillPrices({
   btc: { price: 65000.25, sourceUpdatedAt: "2026-07-17T08:14:31.000Z" },
   eth: { price: 3500.75, sourceUpdatedAt: "2026-07-17T08:14:29.000Z" },
-};
+});
 
 function directionFor(value) {
   if (value >= 0.005) return "up";
@@ -108,10 +109,13 @@ function artifactFixture({
       code_revision: revision,
       run_id: runId,
     },
-    assets: {
-      btc: makeAsset("bitcoin", "BTC", 64000, (offset) => 1 + offset / 4800),
-      eth: makeAsset("ethereum", "ETH", 3400, (offset) => 1 - offset / 9600),
-    },
+    assets: fillArtifactAssets(
+      {
+        btc: makeAsset("bitcoin", "BTC", 64000, (offset) => 1 + offset / 4800),
+        eth: makeAsset("ethereum", "ETH", 3400, (offset) => 1 - offset / 9600),
+      },
+      (a, id, symbol) => makeAsset(id, symbol, 100, (offset) => 1 + offset / 4800),
+    ),
   };
 }
 

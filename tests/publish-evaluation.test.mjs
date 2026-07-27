@@ -20,6 +20,7 @@ import {
   createFreshSnapshot,
   formatMexicoCityTimestamp,
 } from '../netlify/lib/market-contract.mjs';
+import { fillPrices, fillArtifactAssets, fillAccuracyAssets } from './asset-fixtures.mjs';
 
 const HOUR = 60 * 60 * 1000;
 const w = (ms) => Math.floor(ms / 1000) * 1000;
@@ -40,9 +41,18 @@ function records(now = w(Date.now())) {
     valid_until: formatMexicoCityTimestamp(new Date(generated + 36 * HOUR)), expires_at: formatMexicoCityTimestamp(new Date(generated + 72 * HOUR)),
     timezone: 'America/Mexico_City', currency: 'usd', horizon_hours: 48, step_hours: 1,
     direction_policy: { horizon_hours: 48, flat_threshold_return: 0.005 }, producer: { model_id: 't', code_revision: rev, run_id: runId },
-    assets: { btc: asset('bitcoin', 'BTC'), eth: asset('ethereum', 'ETH') },
+    assets: fillArtifactAssets(
+      { btc: asset('bitcoin', 'BTC'), eth: asset('ethereum', 'ETH') },
+      (a, id, symbol) => asset(id, symbol),
+    ),
   };
-  const prices = { btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() }, eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() } };
+  const prices = fillPrices(
+    {
+      btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() },
+      eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() },
+    },
+    { sourceUpdatedAt: new Date(now - 60000).toISOString() },
+  );
   const base = createFreshSnapshot(prices, new Date(now));
   const fc = anchorForecast(artifact, forecastArtifactStatus(artifact, new Date(now)), base, formatMexicoCityTimestamp);
   return buildPredictionRecords(createFreshSnapshot(prices, new Date(now), fc));
@@ -50,7 +60,7 @@ function records(now = w(Date.now())) {
 
 const GOOD_ACCURACY = {
   status: 'available', window_days: 7, measured_through: formatMexicoCityTimestamp(new Date()),
-  assets: { btc: { status: 'available', hit_rate: 55.0, sample_size: 40 }, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 3 } },
+  assets: fillAccuracyAssets({ btc: { status: 'available', hit_rate: 55.0, sample_size: 40 }, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 3 } }),
 };
 const HEALTH = { measured_at: formatMexicoCityTimestamp(new Date()), assets: {} };
 
