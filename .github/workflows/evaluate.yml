@@ -43,12 +43,24 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/history"
-          for asset in btc eth; do
-            curl --fail --silent --show-error --location \
+          # Evaluate resolves predictions for every configured asset, so pull each
+          # from production and fall back to the committed seeds for ALL assets if
+          # any is not yet in Blobs (a newly added coin before its first refresh).
+          assets="btc eth bnb xrp sol trx doge ada link hype cheems"
+          use_seed=0
+          for asset in ${assets}; do
+            if ! curl --fail --silent --show-error --location \
               --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
               "https://likelycoin.netlify.app/api/history?asset=${asset}" \
-              --output "${RUNNER_TEMP}/history/${asset}.json"
+              --output "${RUNNER_TEMP}/history/${asset}.json"; then
+              echo "production history missing for ${asset}; using committed seeds for all assets"
+              use_seed=1
+              break
+            fi
           done
+          if [ "${use_seed}" = "1" ]; then
+            cp data/history/*.json "${RUNNER_TEMP}/history/"
+          fi
 
       - name: Fetch current predictions log from Blobs
         env:

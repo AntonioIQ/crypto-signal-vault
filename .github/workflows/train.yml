@@ -42,14 +42,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/history"
-          curl --fail --silent --show-error --location \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            "https://likelycoin.netlify.app/api/history?asset=btc" \
-            --output "${RUNNER_TEMP}/history/btc.json"
-          curl --fail --silent --show-error --location \
-            --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-            "https://likelycoin.netlify.app/api/history?asset=eth" \
-            --output "${RUNNER_TEMP}/history/eth.json"
+          # train.py builds a single artifact for every configured asset, so all
+          # must be present. Pull each from production; if any is not yet in Blobs
+          # (a newly added coin before its first refresh-history run), fall back to
+          # the committed seeds for ALL assets — a mix of fresh and stale reference
+          # times would trip train.py's one-hour skew check.
+          assets="btc eth bnb xrp sol trx doge ada link hype cheems"
+          use_seed=0
+          for asset in ${assets}; do
+            if ! curl --fail --silent --show-error --location \
+              --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
+              "https://likelycoin.netlify.app/api/history?asset=${asset}" \
+              --output "${RUNNER_TEMP}/history/${asset}.json"; then
+              echo "production history missing for ${asset}; using committed seeds for all assets"
+              use_seed=1
+              break
+            fi
+          done
+          if [ "${use_seed}" = "1" ]; then
+            cp data/history/*.json "${RUNNER_TEMP}/history/"
+          fi
 
       - name: Install Python dependencies
         run: python -m pip install --requirement ml/requirements.txt
