@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-07-27 — 11 monedas EN PRODUCCIÓN + mejoras de gráfica
+
+Antonio pidió "las 10 más usadas y Cheems". Verificado con CoinGecko que Cheems vive (`cheems-token`, rank ~282). Elegido 10 conocidas + Cheems (sin stablecoins ni tokens raros, por honestidad: un stablecoin sería una línea plana). Sistema ya data-driven, así que fue extender `ASSETS`/`SUPPORTED_ASSETS` + pestañas dinámicas + precio adaptativo (Cheems ≈ $0.0000005) + semillas reales de las 11.
+
+El grueso del trabajo fue **destapar 5 hardcodeos `[btc, eth]`** en contratos de producción (forecast, accuracy, analyst-context, analyst-fallback) y **actualizar ~15 archivos de test** (fixtures asumían 2 activos). Suites: Node 134 + Python 39 verde. Verifiqué que `train.py` construye un artefacto válido de las 11 semillas reales (Prophet corrió, incluido Cheems).
+
+Merge a `main` (`5358e69`, deploy 1). **Descubierto post-merge** que `train.yml`/`evaluate.yml` solo bajaban btc/eth → los arreglé para las 11 con fallback a semilla (deploy 2, `66ac809`). Lección repetida de Fase 4: debí incluir el fix de CI en el merge. Total 30 créditos.
+
+Estado: sitio con 11 monedas vivo. Precios en vivo tras el próximo `predict`; pronóstico/escenarios tras el próximo `refresh-history` (puebla las 9 nuevas en Blobs) + entrenamiento. **Riesgo conocido**: el entrenamiento es "todo o nada" (si el histórico de una moneda falla, se cae el pronóstico de todas) — follow-up: resiliencia por-moneda.
+
 ## 2026-07-23 — Upgrade visual EN PRODUCCIÓN (merge + train)
 
 Cierre del upgrade visual. Antonio eligió **mergear directo a producción** (sin revisión externa). Secuencia "volumen + producción" completa: merge de `feature/chart-upgrade` → `main` (`112f09b`, 1 deploy = 15 créditos), corrida de `train.py` que activó los escenarios reales, `predict` que ancló el artefacto. Verificado en vivo: tablero de Galton mostrando **40 de 40 escenarios reales apuntando a subida (100%)**, canvas presente, cero errores en consola. **Volumen aún en 0** en `/api/history` de producción — aparece solo tras la próxima corrida de `refresh-history` (cada 6h); no requiere acción.

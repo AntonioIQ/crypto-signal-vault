@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 11 monedas + chips 24h, comparación y banda de rango — EN PRODUCCIÓN 2026-07-27
+
+**Entregable**: el tablero pasó de 2 a **11 monedas** (BTC, ETH, BNB, XRP, SOL, TRX, DOGE, ADA, LINK, HYPE y **Cheems**), vivas en `https://likelycoin.netlify.app`.
+
+- **Config data-driven**: todo el pipeline (market, forecast, prediction, accuracy, chat) recorre `ASSETS`/`SUPPORTED_ASSETS`. Se eliminaron 5 hardcodeos `[btc, eth]` en producción (contratos de pronóstico/precisión, contexto y fallback del chat); los chequeos de skew abarcan todas.
+- **Frontend**: pestañas dinámicas desde el snapshot (tira scrolleable), y **precio adaptativo** para monedas sub-centavo (Cheems ≈ `$0.0000005` en vez de `$0`). Módulo `public/js/format.js`.
+- **Gráfica**: chips 24h (cambio/máx/mín/volumen del histórico horario propio), modo **BTC vs ETH** rebasado a 100, y toggle de **banda de rango diario**.
+- **Semillas**: histórico horario real de 30 días + volumen para las 11; `train.py` verificado construyendo un artefacto válido de las 11 de punta a punta (Prophet, incluido Cheems).
+- **CI**: `train.yml` y `evaluate.yml` ahora bajan las 11 (con fallback a semilla si una aún no está en Blobs); `netlify.toml` ignora `.github/` para que los cambios de CI no gasten deploys.
+- **Tests**: fixtures compartidos rellenan el set completo. Node **134** + Python **39** en verde.
+- **Costo**: 2 production deploys (30 créditos) — el 2º por un arreglo de CI que debió ir en el 1º.
+- **Pendiente automático**: precios en vivo tras el próximo `predict` (~15 min); pronóstico y escenarios de las 11 tras el próximo `refresh-history` (que puebla las 9 nuevas en Blobs) + entrenamiento.
+
 ## Upgrade visual de la gráfica — EN PRODUCCIÓN 2026-07-23
 
 **Entregable**: gráfica propia (sin librería) que reemplaza a Chart.js + distribución de escenarios del modelo, vivas en `https://likelycoin.netlify.app`.

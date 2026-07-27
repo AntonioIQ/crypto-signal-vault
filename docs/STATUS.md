@@ -2,11 +2,20 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-23 09:50 (hora CDMX)
+**Última actualización**: 2026-07-27 14:00 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — UPGRADE VISUAL EN PRODUCCIÓN ✅ (2026-07-23); Fases 1–4 cerradas
+## Fase activa: ninguna — 11 MONEDAS EN PRODUCCIÓN ✅ (2026-07-27); Fases 1–4 + visual cerradas
+
+### 11 monedas (BTC, ETH, BNB, XRP, SOL, TRX, DOGE, ADA, LINK, HYPE, Cheems) — EN PRODUCCIÓN
+
+Config data-driven (`ASSETS`/`SUPPORTED_ASSETS`); se quitaron 5 hardcodeos `[btc, eth]` de contratos de producción. Pestañas dinámicas + precio adaptativo sub-centavo. Gráfica: chips 24h, modo BTC vs ETH, banda de rango. Semillas reales de las 11 + volumen. `train.py` verificado construyendo artefacto de las 11. Node 134 + Python 39 verde. Deploys: `5358e69` (feature) + `66ac809` (fix CI de las 11) = **30 créditos**.
+
+- **Automático pendiente**: precios en vivo tras el próximo `predict` (~15 min); pronóstico/escenarios de las 11 tras el próximo `refresh-history` (00:00/06:00/12:00/18:00 UTC — puebla las 9 nuevas en Blobs) + entrenamiento (07:00 UTC diario, o dispatch manual de `train.yml` tras el refresh).
+- **Riesgo/Follow-up**: entrenamiento "todo o nada" — si el histórico de una moneda falla, cae el pronóstico de todas. Considerar resiliencia por-moneda.
+
+### Upgrade visual — EN PRODUCCIÓN (`07_GRAFICA.md`)
 
 ### Upgrade visual — EN PRODUCCIÓN (`07_GRAFICA.md`)
 
