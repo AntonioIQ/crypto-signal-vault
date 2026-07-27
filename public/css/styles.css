@@ -362,6 +362,33 @@ a {
   color: var(--down);
 }
 
+/* Coin switch: the whole price block crossfades up into place. */
+.price-block.is-swap {
+  animation: lk-price-swap 0.42s cubic-bezier(0.32, 0, 0.24, 1);
+}
+
+@keyframes lk-price-swap {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Live update: the freshly counted price pulses brighter for a beat. */
+.price.is-fresh {
+  animation: lk-price-fresh 0.9s ease-out;
+}
+
+@keyframes lk-price-fresh {
+  0% { color: var(--accent-bright); text-shadow: 0 0 22px rgba(105, 230, 178, 0.45); }
+  100% { color: var(--text); text-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-block.is-swap,
+  .price.is-fresh {
+    animation: none;
+  }
+}
+
 .price-meta {
   margin: 0;
   padding: 0;

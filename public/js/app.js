@@ -39,6 +39,7 @@ const els = {
   accuracy: document.getElementById('card-accuracy'),
   accuracyStatus: document.getElementById('card-accuracy-status'),
   assetTabs: document.getElementById('asset-tabs'),
+  priceBlock: document.querySelector('.price-block'),
   tabs: [],
 };
 
@@ -135,7 +136,37 @@ function change24h(history, price, priceAsOf) {
   return ((price - anchor.price) / anchor.price) * 100;
 }
 
-function renderPrice() {
+// Restart a one-shot CSS animation by removing the class, forcing reflow and
+// re-adding it — so the same class animates again on the next call.
+function replay(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+// Tween a number into an element, formatting each frame, so a price update
+// reads as motion rather than a jump. `from` 0 gives the boot count-up; a huge
+// relative jump (a coin switch) skips the tween and lets the crossfade carry it.
+function animateCount(el, to, formatter, { from } = {}) {
+  const start = typeof from === 'number' ? from
+    : typeof el._val === 'number' ? el._val : to;
+  el._val = to;
+  if (!Number.isFinite(start) || !Number.isFinite(to)) { el.textContent = formatter(to); return; }
+  const ratio = Math.abs(to - start) / (Math.abs(to) || 1);
+  if (start === to || ratio > 1.5) { el.textContent = formatter(to); return; }
+  const duration = 650;
+  const t0 = performance.now();
+  const ease = (p) => 1 - (1 - p) ** 3;
+  (function step(now) {
+    const p = Math.min(1, (now - t0) / duration);
+    el.textContent = formatter(start + (to - start) * ease(p));
+    if (p < 1) requestAnimationFrame(step);
+  })(t0);
+}
+
+// mode: 'switch' (coin change → crossfade), 'update' (live refresh → count-up +
+// pulse), or 'boot' (first paint → count-up from 0).
+function renderPrice(mode = 'switch') {
   const asset = state.snapshot?.assets?.[state.asset];
   const history = state.history[state.asset];
   els.assetName.textContent = asset?.name ?? state.asset.toUpperCase();
@@ -144,7 +175,20 @@ function renderPrice() {
   // Live price when available; otherwise last history point (labeled stale upstream).
   const lastPoint = history?.points?.at(-1) ?? null;
   const price = asset?.price ?? lastPoint?.price ?? null;
-  els.price.textContent = price === null ? 'Sin datos' : fmtPrice(price);
+  if (price === null) {
+    els.price.textContent = 'Sin datos';
+    els.price._val = undefined;
+  } else if (mode === 'boot') {
+    animateCount(els.price, price, fmtPrice, { from: 0 });
+  } else if (mode === 'update') {
+    const changed = els.price._val !== price;
+    animateCount(els.price, price, fmtPrice);
+    if (changed) replay(els.price, 'is-fresh');
+  } else {
+    els.price._val = price;
+    els.price.textContent = fmtPrice(price);
+  }
+  if (mode === 'switch') replay(els.priceBlock ?? els.price, 'is-swap');
 
   // The change must be anchored to whichever price we actually display.
   const priceAsOf = asset?.price != null
@@ -228,7 +272,7 @@ function buildTabs(assets) {
   });
 }
 
-async function selectAsset(asset) {
+async function selectAsset(asset, mode = 'switch') {
   state.asset = asset;
   for (const tab of els.tabs) {
     const active = tab.dataset.asset === asset;
@@ -244,11 +288,31 @@ async function selectAsset(asset) {
       console.error(error);
     }
   }
-  renderPrice();
+  renderPrice(mode);
   renderPrediction();
   renderAccuracy();
   state.chart?.setAsset(asset);
   state.scenarios?.setAsset(asset);
+}
+
+// Light live refresh: re-read the snapshot on an interval (only while the tab is
+// visible) so a moved price counts up instead of waiting for a manual reload.
+// Prices advance every ~15 min upstream, so this stays cheap.
+function startLiveRefresh(intervalMs = 5 * 60 * 1000) {
+  setInterval(async () => {
+    if (document.hidden) return;
+    let snapshot;
+    try {
+      snapshot = await loadSnapshot();
+    } catch {
+      return;
+    }
+    state.snapshot = snapshot;
+    renderStatus(snapshot);
+    renderPrice('update');
+    renderPrediction();
+    renderAccuracy();
+  }, intervalMs);
 }
 
 function renderAccuracy() {
@@ -293,7 +357,8 @@ async function init() {
       console.error(scenarioError);
     }
 
-    await selectAsset(state.asset);
+    await selectAsset(state.asset, 'boot');
+    startLiveRefresh();
   } catch (error) {
     console.error(error);
     setStatus('error', 'No se pudieron cargar los datos. Intenta de nuevo en unos minutos.');
