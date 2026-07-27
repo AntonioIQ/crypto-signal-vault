@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 import { createLatestHandler } from '../netlify/functions/latest.mjs';
 import { runPrediction, LATEST_SNAPSHOT_KEY } from '../netlify/functions/predict.mjs';
 import { createFreshSnapshot } from '../netlify/lib/market-contract.mjs';
+import { fillPrices } from './asset-fixtures.mjs';
 
-const SAMPLE_PRICES = {
+const SAMPLE_PRICES = fillPrices({
   btc: { price: 65000.25, sourceUpdatedAt: '2026-07-15T17:59:31.000Z' },
   eth: { price: 1900.5, sourceUpdatedAt: '2026-07-15T17:59:31.000Z' },
-};
+});
 
 function makeStore(initialSnapshot = null, { failReads = false } = {}) {
   const writes = [];

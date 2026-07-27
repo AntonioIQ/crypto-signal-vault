@@ -226,9 +226,11 @@ export function assertValidAccuracy(accuracy) {
     `accuracy.window_days must be ${ACCURACY_WINDOW_DAYS}.`,
   );
   parseMexicoCityTimestamp(document.measured_through, "accuracy.measured_through", PredictionContractError);
-  requireExactObject(document.assets, ["btc", "eth"], "accuracy.assets", PredictionContractError);
-  validateAccuracyAsset(document.assets.btc, "accuracy.assets.btc");
-  validateAccuracyAsset(document.assets.eth, "accuracy.assets.eth");
+  const assetKeys = Object.keys(ASSETS);
+  requireExactObject(document.assets, assetKeys, "accuracy.assets", PredictionContractError);
+  for (const asset of assetKeys) {
+    validateAccuracyAsset(document.assets[asset], `accuracy.assets.${asset}`);
+  }
   return accuracy;
 }
 

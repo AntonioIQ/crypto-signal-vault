@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-07-15T00:00:00-06:00",
+  "generated_at": "2026-07-24T03:14:25-06:00",
   "timezone": "America/Mexico_City",
   "currency": "usd",
   "stale": true,
@@ -16,6 +16,69 @@
       "id": "ethereum",
       "symbol": "ETH",
       "name": "Ethereum",
+      "price": null,
+      "source_updated_at": null
+    },
+    "bnb": {
+      "id": "binancecoin",
+      "symbol": "BNB",
+      "name": "BNB",
+      "price": null,
+      "source_updated_at": null
+    },
+    "xrp": {
+      "id": "ripple",
+      "symbol": "XRP",
+      "name": "XRP",
+      "price": null,
+      "source_updated_at": null
+    },
+    "sol": {
+      "id": "solana",
+      "symbol": "SOL",
+      "name": "Solana",
+      "price": null,
+      "source_updated_at": null
+    },
+    "trx": {
+      "id": "tron",
+      "symbol": "TRX",
+      "name": "TRON",
+      "price": null,
+      "source_updated_at": null
+    },
+    "doge": {
+      "id": "dogecoin",
+      "symbol": "DOGE",
+      "name": "Dogecoin",
+      "price": null,
+      "source_updated_at": null
+    },
+    "ada": {
+      "id": "cardano",
+      "symbol": "ADA",
+      "name": "Cardano",
+      "price": null,
+      "source_updated_at": null
+    },
+    "link": {
+      "id": "chainlink",
+      "symbol": "LINK",
+      "name": "Chainlink",
+      "price": null,
+      "source_updated_at": null
+    },
+    "hype": {
+      "id": "hyperliquid",
+      "symbol": "HYPE",
+      "name": "Hyperliquid",
+      "price": null,
+      "source_updated_at": null
+    },
+    "cheems": {
+      "id": "cheems-token",
+      "symbol": "CHEEMS",
+      "name": "Cheems",
       "price": null,
       "source_updated_at": null
     }

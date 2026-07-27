@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { fillArtifactAssets } from './asset-fixtures.mjs';
 
 import {
   ForecastPublicationError,
@@ -69,10 +70,13 @@ function artifactPayload({
       code_revision: revision,
       run_id: runId,
     },
-    assets: {
-      btc: asset('bitcoin', 'BTC', 65000),
-      eth: asset('ethereum', 'ETH', 3500),
-    },
+    assets: fillArtifactAssets(
+      {
+        btc: asset('bitcoin', 'BTC', 65000),
+        eth: asset('ethereum', 'ETH', 3500),
+      },
+      (a, id, symbol) => asset(id, symbol, 100),
+    ),
   }, null, 2)}\n`;
 }
 

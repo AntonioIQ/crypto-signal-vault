@@ -359,7 +359,7 @@ def build_artifact(
             raise TrainingError(f"{asset} reference observation is more than 12 hours old")
         reference_times[asset] = observed_at
     if max(reference_times.values()) - min(reference_times.values()) > MAX_REFERENCE_SKEW:
-        raise TrainingError("BTC and ETH reference observations differ by more than one hour")
+        raise TrainingError("asset reference observations differ by more than one hour")
 
     generated_cdmx = generated_at.astimezone(ZoneInfo(TIMEZONE_NAME))
     assets = {
@@ -646,7 +646,7 @@ def validate_artifact(document: Any) -> None:
     required_reference_times = [reference_times[asset] for asset in SUPPORTED_ASSETS]
     if max(required_reference_times) - min(required_reference_times) > MAX_REFERENCE_SKEW:
         raise ArtifactValidationError(
-            "artifact BTC and ETH reference observations differ by more than one hour"
+            "artifact asset reference observations differ by more than one hour"
         )
 
     try:

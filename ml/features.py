@@ -13,6 +13,15 @@ from typing import Any, Mapping, Sequence
 SUPPORTED_ASSETS = {
     "btc": {"coin_id": "bitcoin", "symbol": "BTC"},
     "eth": {"coin_id": "ethereum", "symbol": "ETH"},
+    "bnb": {"coin_id": "binancecoin", "symbol": "BNB"},
+    "xrp": {"coin_id": "ripple", "symbol": "XRP"},
+    "sol": {"coin_id": "solana", "symbol": "SOL"},
+    "trx": {"coin_id": "tron", "symbol": "TRX"},
+    "doge": {"coin_id": "dogecoin", "symbol": "DOGE"},
+    "ada": {"coin_id": "cardano", "symbol": "ADA"},
+    "link": {"coin_id": "chainlink", "symbol": "LINK"},
+    "hype": {"coin_id": "hyperliquid", "symbol": "HYPE"},
+    "cheems": {"coin_id": "cheems-token", "symbol": "CHEEMS"},
 }
 
 

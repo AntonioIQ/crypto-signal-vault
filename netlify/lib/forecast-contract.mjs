@@ -313,12 +313,10 @@ export function assertValidForecastArtifact(artifact) {
     throw new ForecastContractError("assets must be an object.");
   }
   const assetEntries = Object.entries(document.assets);
-  if (
-    !Object.hasOwn(document.assets, "btc") ||
-    !Object.hasOwn(document.assets, "eth") ||
-    assetEntries.some(([asset]) => asset.length === 0)
-  ) {
-    throw new ForecastContractError("assets must contain btc and eth.");
+  const assetKeys = Object.keys(ASSETS);
+  const missing = assetKeys.filter((asset) => !Object.hasOwn(document.assets, asset));
+  if (missing.length > 0 || assetEntries.some(([asset]) => asset.length === 0)) {
+    throw new ForecastContractError(`assets must contain: ${assetKeys.join(", ")}.`);
   }
 
   const referenceTimes = new Map(
@@ -327,12 +325,12 @@ export function assertValidForecastArtifact(artifact) {
       validateArtifactAsset(value, asset, generatedAt),
     ]),
   );
-  if (
-    Math.abs(referenceTimes.get("btc") - referenceTimes.get("eth")) >
-    MAX_REFERENCE_SKEW_MS
-  ) {
+  // Every asset must have been observed within the same hour: the widest gap
+  // across all of them stays under the skew budget.
+  const refValues = assetKeys.map((asset) => referenceTimes.get(asset));
+  if (Math.max(...refValues) - Math.min(...refValues) > MAX_REFERENCE_SKEW_MS) {
     throw new ForecastContractError(
-      "BTC and ETH references differ by more than one hour.",
+      "asset references differ by more than one hour.",
     );
   }
 
@@ -499,9 +497,11 @@ export function assertValidPublicForecast(forecast) {
     throw new ForecastContractError("forecast timestamps are inconsistent.");
   }
 
-  requireExactObject(document.assets, ["btc", "eth"], "forecast.assets");
-  validatePublicForecastAsset(document.assets.btc, "btc", anchoredAt);
-  validatePublicForecastAsset(document.assets.eth, "eth", anchoredAt);
+  const assetKeys = Object.keys(ASSETS);
+  requireExactObject(document.assets, assetKeys, "forecast.assets");
+  for (const asset of assetKeys) {
+    validatePublicForecastAsset(document.assets[asset], asset, anchoredAt);
+  }
   return forecast;
 }
 

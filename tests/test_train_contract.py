@@ -10,7 +10,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from ml.features import PricePoint, validate_history_document
+from ml.features import PricePoint, SUPPORTED_ASSETS, validate_history_document
 from ml.train import (
     ArtifactValidationError,
     FLAT_THRESHOLD_RETURN,
@@ -58,8 +58,34 @@ def linear_factory(records: list[tuple[PricePoint, ...]] | None = None):
     return lambda: LinearForecaster(records)
 
 
+# build_artifact requires a history for every configured asset. Tests care about
+# btc/eth; this fills the rest with valid contiguous histories so the whole set
+# is present.
+def all_histories(overrides: dict, count: int = 235) -> dict:
+    out = dict(overrides)
+    for index, asset in enumerate(SUPPORTED_ASSETS):
+        if asset not in out:
+            out[asset] = points(count, 10.0 + index)
+    return out
+
+
+def seed_generated_at() -> str:
+    """A generated-at just after the newest committed seed observation, so the
+    CLI integration tests stay valid whenever the seeds are refreshed."""
+    root = Path(__file__).resolve().parents[1]
+    newest = max(
+        datetime.fromisoformat(
+            json.loads((root / "data/history" / f"{asset}.json").read_text())["generated_at"]
+        )
+        for asset in SUPPORTED_ASSETS
+    )
+    return (
+        newest.astimezone(timezone.utc) + timedelta(minutes=5)
+    ).isoformat().replace("+00:00", "Z")
+
+
 def artifact_fixture(validation_origins: int = 20) -> dict:
-    histories = {"btc": points(235, 100.0), "eth": points(235, 50.0)}
+    histories = all_histories({"btc": points(235, 100.0), "eth": points(235, 50.0)})
     return build_artifact(
         histories,
         generated_at=datetime(2026, 1, 10, 19, tzinfo=timezone.utc),
@@ -176,7 +202,7 @@ class ArtifactContractTests(unittest.TestCase):
             first["artifact_version"],
         )
         self.assertEqual("gh987654321-1", first["producer"]["run_id"])
-        self.assertEqual({"btc", "eth"}, set(first["assets"]))
+        self.assertEqual(set(SUPPORTED_ASSETS), set(first["assets"]))
         for asset in ("btc", "eth"):
             forecast = first["assets"][asset]["forecast"]
             self.assertEqual(48, len(forecast))
@@ -270,22 +296,22 @@ class ArtifactContractTests(unittest.TestCase):
         records: list[tuple[PricePoint, ...]] = []
         cases = {
             "short": (
-                {"btc": points(167), "eth": points(167, 50.0)},
+                all_histories({"btc": points(167), "eth": points(167, 50.0)}, count=167),
                 START + timedelta(hours=167),
             ),
             "stale": (
-                {"btc": points(168), "eth": points(168, 50.0)},
+                all_histories({"btc": points(168), "eth": points(168, 50.0)}, count=168),
                 START + timedelta(hours=180),
             ),
             "future": (
-                {"btc": points(168), "eth": points(168, 50.0)},
+                all_histories({"btc": points(168), "eth": points(168, 50.0)}, count=168),
                 START + timedelta(hours=166),
             ),
             "skewed": (
-                {
+                all_histories({
                     "btc": points(168),
                     "eth": points(168, 50.0, START - timedelta(hours=2)),
-                },
+                }, count=168),
                 START + timedelta(hours=168),
             ),
         }
@@ -303,7 +329,7 @@ class ArtifactContractTests(unittest.TestCase):
 
     def test_exactly_168_contiguous_fresh_hours_can_publish_without_confidence(self) -> None:
         artifact = build_artifact(
-            {"btc": points(168), "eth": points(168, 50.0)},
+            all_histories({"btc": points(168), "eth": points(168, 50.0)}, count=168),
             generated_at=START + timedelta(hours=168),
             code_revision="a1b2c3d",
             run_id="gh1-1",
@@ -328,7 +354,7 @@ class ArtifactContractTests(unittest.TestCase):
         self.assertEqual(167, len(eth))
         with self.assertRaisesRegex(TrainingError, "at least 168"):
             build_artifact(
-                {"btc": btc, "eth": eth},
+                all_histories({"btc": btc, "eth": eth}),
                 generated_at=recent_btc[-1].timestamp + timedelta(hours=1),
                 code_revision="a1b2c3d",
                 run_id="gh1-1",
@@ -356,7 +382,7 @@ class ArtifactContractTests(unittest.TestCase):
                         "--output",
                         str(output),
                         "--generated-at",
-                        "2026-07-16T03:00:00Z",
+                        seed_generated_at(),
                         "--code-revision",
                         "deadbee",
                         "--validation-origins",
@@ -395,7 +421,7 @@ class ArtifactContractTests(unittest.TestCase):
                         "--output",
                         "/unused/forecast.json",
                         "--generated-at",
-                        "2026-07-16T03:00:00Z",
+                        seed_generated_at(),
                         "--code-revision",
                         "deadbee",
                         "--validation-origins",

@@ -18,6 +18,7 @@ import {
   createFreshSnapshot,
   formatMexicoCityTimestamp,
 } from '../netlify/lib/market-contract.mjs';
+import { fillPrices, fillArtifactAssets, fillAccuracyAssets, ASSET_KEYS } from './asset-fixtures.mjs';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -62,12 +63,18 @@ function anchoredSnapshot({ now = wholeSecond(Date.now()) } = {}) {
     step_hours: 1,
     direction_policy: { horizon_hours: 48, flat_threshold_return: 0.005 },
     producer: { model_id: 'test', code_revision: revision, run_id: runId },
-    assets: { btc: makeAsset('bitcoin', 'BTC', 0.02), eth: makeAsset('ethereum', 'ETH', -0.02) },
+    assets: fillArtifactAssets(
+      { btc: makeAsset('bitcoin', 'BTC', 0.02), eth: makeAsset('ethereum', 'ETH', -0.02) },
+      (a, id, symbol) => makeAsset(id, symbol, 0.01),
+    ),
   };
-  const prices = {
-    btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() },
-    eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() },
-  };
+  const prices = fillPrices(
+    {
+      btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() },
+      eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() },
+    },
+    { sourceUpdatedAt: new Date(now - 60000).toISOString() },
+  );
   const base = createFreshSnapshot(prices, new Date(now));
   const status = forecastArtifactStatus(artifact, new Date(now));
   const forecast = anchorForecast(artifact, status, base, formatMexicoCityTimestamp);
@@ -77,7 +84,7 @@ function anchoredSnapshot({ now = wholeSecond(Date.now()) } = {}) {
 test('buildPredictionRecords emits one record per asset from a fresh forecast', () => {
   const snapshot = anchoredSnapshot();
   const records = buildPredictionRecords(snapshot);
-  assert.equal(records.length, 2);
+  assert.equal(records.length, ASSET_KEYS.length);
   const btc = records.find((r) => r.asset === 'btc');
   assert.equal(btc.horizon_h, 48);
   assert.equal(btc.direction, 'up');
@@ -163,10 +170,10 @@ test('accuracy block: available requires one-decimal percents and matching statu
     status: 'available',
     window_days: 7,
     measured_through: formatMexicoCityTimestamp(new Date()),
-    assets: {
+    assets: fillAccuracyAssets({
       btc: { status: 'available', hit_rate: 58.3, sample_size: 96 },
       eth: { status: 'insufficient_data', hit_rate: null, sample_size: 11 },
-    },
+    }),
   };
   const withBtc = (btc) => ({ ...good, assets: { ...good.assets, btc } });
   assert.doesNotThrow(() => assertValidAccuracy(good));
@@ -185,7 +192,7 @@ test('accuracy block: the 20-sample threshold and 7-day window are enforced', ()
     status: 'available',
     window_days,
     measured_through,
-    assets: { btc, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 0 } },
+    assets: fillAccuracyAssets({ btc, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 0 } }),
   });
   // 20 samples: available is allowed
   assert.ok(isValidAccuracy(build({ status: 'available', hit_rate: 50.0, sample_size: 20 })));

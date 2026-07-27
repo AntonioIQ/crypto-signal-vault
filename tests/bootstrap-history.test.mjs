@@ -8,6 +8,7 @@ import {
   bootstrapHistory,
   HISTORY_DAYS,
 } from "../scripts/bootstrap-history.mjs";
+import { ASSETS } from "../netlify/lib/coingecko.mjs";
 
 test("bootstrapHistory creates valid BTC and ETH documents and files", async (t) => {
   const outputDirectory = await mkdtemp(
@@ -26,6 +27,15 @@ test("bootstrapHistory creates valid BTC and ETH documents and files", async (t)
       { timestamp: "2026-07-16T01:00:00.000Z", price: 3_500 },
     ],
   };
+  // Every other configured coin gets generic points so bootstrap covers them all.
+  for (const meta of Object.values(ASSETS)) {
+    if (!pointsByCoin[meta.id]) {
+      pointsByCoin[meta.id] = [
+        { timestamp: "2026-07-16T02:00:00.000Z", price: 12 },
+        { timestamp: "2026-07-16T01:00:00.000Z", price: 10 },
+      ];
+    }
+  }
   const fetchChart = async (coinId, options) => {
     calls.push([coinId, options]);
     return pointsByCoin[coinId];
@@ -39,17 +49,16 @@ test("bootstrapHistory creates valid BTC and ETH documents and files", async (t)
 
   assert.deepEqual(
     calls.sort(([left], [right]) => left.localeCompare(right)),
-    [
-      ["bitcoin", { days: HISTORY_DAYS }],
-      ["ethereum", { days: HISTORY_DAYS }],
-    ],
+    Object.values(ASSETS)
+      .map((meta) => [meta.id, { days: HISTORY_DAYS }])
+      .sort(([left], [right]) => left.localeCompare(right)),
   );
-  assert.deepEqual(Object.keys(documents).sort(), ["btc", "eth"]);
+  assert.deepEqual(
+    Object.keys(documents).sort(),
+    Object.keys(ASSETS).slice().sort(),
+  );
 
-  for (const [asset, coinId] of [
-    ["btc", "bitcoin"],
-    ["eth", "ethereum"],
-  ]) {
+  for (const [asset, coinId] of Object.entries(ASSETS).map(([a, m]) => [a, m.id])) {
     const filePath = path.join(outputDirectory, `${asset}.json`);
     const fileDocument = JSON.parse(await readFile(filePath, "utf8"));
 

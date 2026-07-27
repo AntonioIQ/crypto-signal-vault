@@ -1,21 +1,26 @@
 // LikelyCoin — bespoke SVG chart (no charting library). Chart-only component:
-// the dashboard owns the BTC/ETH tabs and the price; this renders the chart
-// with a Línea/Velas mode toggle, a forecast on/off toggle, and hover.
-// Candles are real daily OHLC bucketed from the hourly history; the forecast is
-// the anchored 48h path. Colors come from the site CSS variables so it matches
-// the theme (real line/up = --accent, forecast/down = --forecast/--chart-down).
+// the dashboard owns the coin tabs and the price; this renders the chart with
+// Línea/Velas/Comparar modes, a forecast on/off toggle, a volume toggle and a
+// daily-range band toggle, plus a 24h stats strip. Candles are real daily OHLC
+// bucketed from the hourly history; the forecast is the anchored 48h path.
+// Colors come from the site CSS variables so it matches the theme.
+
+import { fmtPrice, fmtCompact, fmtPct } from './format.js';
 
 const W = 720;
 const H = 300;
 const PAD = { l: 8, r: 8, t: 14 };
 const PRICE_H = 240;
 
-const priceFmt = new Intl.NumberFormat('es-MX', {
-  style: 'currency', currency: 'USD', maximumFractionDigits: 0,
-});
 const dayFmt = new Intl.DateTimeFormat('es-MX', {
   timeZone: 'America/Mexico_City', day: 'numeric', month: 'short',
 });
+
+function sortedValid(points) {
+  return (Array.isArray(points) ? points : [])
+    .filter((p) => typeof p?.price === 'number' && Number.isFinite(p.price) && typeof p?.timestamp === 'string')
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
 
 function toCandles(points) {
   const byDay = new Map();
@@ -39,6 +44,38 @@ function toCandles(points) {
     }));
 }
 
+// 24h stats derived from our own hourly history — no extra API call. Volume uses
+// the latest point, which is CoinGecko's rolling 24h figure (summing samples
+// would multiply it), so this stays honest.
+export function stats24h(points) {
+  const valid = sortedValid(points);
+  if (valid.length < 2) return null;
+  const lastT = Date.parse(valid.at(-1).timestamp);
+  if (!Number.isFinite(lastT)) return null;
+  const win = valid.filter((p) => Date.parse(p.timestamp) >= lastT - 24 * 3_600_000);
+  if (win.length < 2) return null;
+  const prices = win.map((p) => p.price);
+  const first = win[0].price;
+  const last = win.at(-1).price;
+  const lastVol = valid.at(-1).volume;
+  return {
+    changePct: ((last - first) / first) * 100,
+    high: Math.max(...prices),
+    low: Math.min(...prices),
+    volume: typeof lastVol === 'number' && Number.isFinite(lastVol) ? lastVol : null,
+  };
+}
+
+// Rebase a price series to 100 at its first point, for a fair overlay of coins
+// with wildly different absolute prices.
+function rebased(points) {
+  const valid = sortedValid(points);
+  if (valid.length < 2) return null;
+  const base = valid[0].price;
+  if (!(base > 0)) return null;
+  return valid.map((p) => (p.price / base) * 100);
+}
+
 function forecastPath(snapshot, asset) {
   const fc = snapshot?.forecast;
   if (!fc || !['fresh', 'stale'].includes(fc.status)) return null;
@@ -55,10 +92,13 @@ export function mountLikelyChart(container, { snapshot, histories }) {
       <div class="lk-modes" role="tablist" aria-label="Tipo de gráfica">
         <button class="lk-mode" data-mode="line" role="tab">Línea</button>
         <button class="lk-mode active" data-mode="candle" role="tab" aria-selected="true">Velas</button>
+        <button class="lk-mode" data-mode="compare" role="tab">BTC vs ETH</button>
       </div>
       <button class="lk-fc-toggle on" data-toggle="fc" aria-pressed="true"><span class="lk-fc-sw"></span>Pronóstico 48 h</button>
       <button class="lk-fc-toggle lk-vol-toggle on" data-toggle="vol" aria-pressed="true"><span class="lk-vol-sw"></span>Volumen</button>
+      <button class="lk-fc-toggle lk-rng-toggle" data-toggle="rng" aria-pressed="false"><span class="lk-vol-sw"></span>Rango diario</button>
     </div>
+    <div class="lk-stats" aria-live="polite"></div>
     <div class="lk-cw">
       <svg class="lk-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Gráfica de precio y pronóstico"></svg>
       <div class="lk-tip" hidden></div>
@@ -68,7 +108,33 @@ export function mountLikelyChart(container, { snapshot, histories }) {
   const svg = container.querySelector('.lk-svg');
   const tip = container.querySelector('.lk-tip');
   const note = container.querySelector('.lk-note');
-  const state = { asset: 'btc', mode: 'candle', showFc: true, showVol: true };
+  const statsEl = container.querySelector('.lk-stats');
+  const state = { asset: 'btc', mode: 'candle', showFc: true, showVol: true, showRange: false };
+
+  function chip(label, value, cls = '') {
+    return `<span class="lk-chip"><span class="lk-chip-k">${label}</span><span class="lk-chip-v ${cls}">${value}</span></span>`;
+  }
+
+  function renderStats() {
+    if (state.mode === 'compare') {
+      const parts = [['btc', 'BTC'], ['eth', 'ETH']].map(([a, sym]) => {
+        const reb = rebased(histories[a]?.points ?? []);
+        if (!reb) return chip(sym, '—');
+        const perf = reb.at(-1) - 100;
+        return chip(`${sym} · 30 d`, fmtPct(perf), perf >= 0 ? 'up' : 'down');
+      });
+      statsEl.innerHTML = parts.join('');
+      return;
+    }
+    const s = stats24h(histories[state.asset]?.points ?? []);
+    if (!s) { statsEl.innerHTML = ''; return; }
+    statsEl.innerHTML = [
+      chip('24 h', fmtPct(s.changePct), s.changePct >= 0 ? 'up' : 'down'),
+      chip('Máx 24 h', fmtPrice(s.high)),
+      chip('Mín 24 h', fmtPrice(s.low)),
+      s.volume != null ? chip('Vol 24 h', fmtCompact(s.volume)) : '',
+    ].join('');
+  }
 
   function scales() {
     const hist = histories[state.asset]?.points ?? [];
@@ -108,15 +174,79 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     };
   }
 
+  // "BTC vs ETH": both rebased to 100, plotted by index fraction so slightly
+  // different lengths still align end to end.
+  function compareScales() {
+    const a = rebased(histories.btc?.points ?? []);
+    const b = rebased(histories.eth?.points ?? []);
+    if (!a || !b) return null;
+    const all = [...a, ...b];
+    const lo = Math.min(...all, 100) * 0.995;
+    const hi = Math.max(...all, 100) * 1.005;
+    const iw = W - PAD.l - PAD.r;
+    const priceH = PRICE_H;
+    return {
+      a, b, lo, hi, priceH,
+      XA: (i) => PAD.l + (i / (a.length - 1)) * iw,
+      XB: (i) => PAD.l + (i / (b.length - 1)) * iw,
+      Y: (v) => PAD.t + priceH - ((v - lo) / (hi - lo)) * priceH,
+    };
+  }
+
+  function drawCompare(animate) {
+    const s = compareScales();
+    svg._s = null; svg._c = s;
+    if (!s) {
+      svg.innerHTML = '';
+      note.textContent = 'Faltan datos de BTC o ETH para comparar.';
+      return;
+    }
+    let grid = '';
+    for (let g = 0; g <= 3; g += 1) {
+      const y = PAD.t + (s.priceH / 3) * g;
+      grid += `<line class="lk-grid" x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}"/>`;
+    }
+    // baseline at 100
+    const y100 = s.Y(100);
+    grid += `<line class="lk-base" x1="${PAD.l}" y1="${y100.toFixed(1)}" x2="${W - PAD.r}" y2="${y100.toFixed(1)}"/>`;
+    const pathOf = (series, X) => series.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + s.Y(v).toFixed(1)).join(' ');
+    const body =
+      `<path class="lk-cmp lk-cmp-b" d="${pathOf(s.b, s.XB)}" stroke="var(--forecast)"/>` +
+      `<path class="lk-cmp lk-cmp-a" d="${pathOf(s.a, s.XA)}" stroke="var(--accent)"/>`;
+    svg.innerHTML = `${grid}${body}
+      <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + s.priceH}"/>`;
+    if (animate) {
+      requestAnimationFrame(() => {
+        svg.querySelectorAll('.lk-cmp').forEach((p, k) => {
+          const L = p.getTotalLength();
+          p.style.strokeDasharray = L; p.style.strokeDashoffset = L; p.getBoundingClientRect();
+          p.style.transition = `stroke-dashoffset 1s cubic-bezier(.6,0,.2,1) ${k * 120}ms`;
+          p.style.strokeDashoffset = 0;
+        });
+      });
+    }
+    note.textContent = 'Ambas rebasadas a 100 hace 30 días: la línea más alta es la que más rindió. No es una recomendación.';
+  }
+
   function draw(animate) {
+    renderStats();
+    if (state.mode === 'compare') { drawCompare(animate); return; }
     const s = scales();
-    svg._s = s;
+    svg._s = s; svg._c = null;
     if (!s) { svg.innerHTML = ''; note.textContent = 'Aún no hay datos para graficar.'; return; }
     const { X, Y, lo } = s;
     let grid = '';
     for (let g = 0; g <= 3; g += 1) {
       const y = PAD.t + (s.priceH / 3) * g;
       grid += `<line class="lk-grid" x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}"/>`;
+    }
+    // Daily high-low volatility band (line mode only).
+    let band = '';
+    if (state.showRange && state.mode === 'line' && s.candles.length > 1) {
+      const step = (s.NH - 1) / (s.candles.length - 1);
+      const top = s.candles.map((c, i) => (i ? 'L' : 'M') + X(i * step).toFixed(1) + ' ' + Y(c.h).toFixed(1)).join(' ');
+      const bottom = s.candles.map((c, i) => 'L' + X((s.candles.length - 1 - i) * step).toFixed(1) + ' ' + Y(s.candles[s.candles.length - 1 - i].l).toFixed(1)).join(' ');
+      band = `<path class="lk-band" d="${top} ${bottom} Z"/>`;
     }
     let body = '';
     if (state.mode === 'line') {
@@ -164,7 +294,7 @@ export function mountLikelyChart(container, { snapshot, histories }) {
       }
     }
 
-    svg.innerHTML = `${grid}${vol}${body}
+    svg.innerHTML = `${grid}${band}${vol}${body}
       <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + s.priceH}"/>
       <circle class="lk-dot" r="4"/>`;
 
@@ -191,16 +321,31 @@ export function mountLikelyChart(container, { snapshot, histories }) {
   }
 
   svg.addEventListener('mousemove', (e) => {
-    const s = svg._s; if (!s) return;
     const r = svg.getBoundingClientRect();
     const px = (e.clientX - r.left) / r.width * W;
+    const c = svg._c;
+    if (c) { // compare mode
+      const f = Math.max(0, Math.min(1, (px - PAD.l) / (W - PAD.l - PAD.r)));
+      const ia = Math.round(f * (c.a.length - 1));
+      const ib = Math.round(f * (c.b.length - 1));
+      const cx = PAD.l + f * (W - PAD.l - PAD.r);
+      const cross = svg.querySelector('.lk-cross');
+      cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.opacity = 0.55;
+      tip.hidden = false;
+      tip.innerHTML =
+        `<b class="up">BTC ${fmtPct(c.a[ia] - 100)}</b><span class="d"><span class="fc">ETH ${fmtPct(c.b[ib] - 100)}</span></span>`;
+      tip.style.left = `${cx / W * r.width}px`;
+      tip.style.top = `${c.Y(Math.max(c.a[ia], c.b[ib])) / H * r.height}px`;
+      return;
+    }
+    const s = svg._s; if (!s) return;
     let i = Math.round(((px - PAD.l) / (W - PAD.l - PAD.r)) * (s.total - 1));
     i = Math.max(0, Math.min(s.total - 1, i));
     let v; let label; let cls = '';
     if (state.mode === 'candle') {
       if (i < s.NC) {
-        const c = s.candles[i]; const up = c.c >= c.o; v = c.c; cls = up ? 'up' : 'down';
-        label = `<span class="d">${dayFmt.format(new Date(c.day))} · O ${priceFmt.format(c.o)} C ${priceFmt.format(c.c)}<br>H ${priceFmt.format(c.h)} L ${priceFmt.format(c.l)}</span>`;
+        const cd = s.candles[i]; const up = cd.c >= cd.o; v = cd.c; cls = up ? 'up' : 'down';
+        label = `<span class="d">${dayFmt.format(new Date(cd.day))} · O ${fmtPrice(cd.o)} C ${fmtPrice(cd.c)}<br>H ${fmtPrice(cd.h)} L ${fmtPrice(cd.l)}</span>`;
       } else {
         v = s.fc ? s.fc.prices[Math.min(s.fc.prices.length - 1, Math.round((i - s.NC + 1) * 6))] : s.candles.at(-1)?.c;
         label = '<span class="d fc">pronóstico</span>';
@@ -216,7 +361,7 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.opacity = 0.55;
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.style.opacity = 1;
     tip.hidden = false;
-    tip.innerHTML = `<b class="${cls}">${priceFmt.format(v)}</b>${label}`;
+    tip.innerHTML = `<b class="${cls}">${fmtPrice(v)}</b>${label}`;
     tip.style.left = `${cx / W * r.width}px`;
     tip.style.top = `${cy / H * r.height}px`;
   });
@@ -229,10 +374,13 @@ export function mountLikelyChart(container, { snapshot, histories }) {
   container.querySelectorAll('.lk-mode').forEach((m) => m.addEventListener('click', () => {
     container.querySelectorAll('.lk-mode').forEach((x) => { x.classList.remove('active'); x.removeAttribute('aria-selected'); });
     m.classList.add('active'); m.setAttribute('aria-selected', 'true');
-    state.mode = m.dataset.mode; draw(true);
+    state.mode = m.dataset.mode;
+    // Toggles that don't apply to compare mode are disabled visually.
+    container.classList.toggle('lk-compare', state.mode === 'compare');
+    draw(true);
   }));
   container.querySelectorAll('[data-toggle]').forEach((btn) => btn.addEventListener('click', () => {
-    const key = btn.dataset.toggle === 'vol' ? 'showVol' : 'showFc';
+    const key = { vol: 'showVol', rng: 'showRange', fc: 'showFc' }[btn.dataset.toggle];
     state[key] = !state[key];
     btn.classList.toggle('on', state[key]);
     btn.setAttribute('aria-pressed', String(state[key]));
@@ -241,6 +389,6 @@ export function mountLikelyChart(container, { snapshot, histories }) {
 
   draw(true);
   return {
-    setAsset(asset) { state.asset = asset; draw(true); },
+    setAsset(asset) { state.asset = asset; if (state.mode !== 'compare') draw(true); else renderStats(); },
   };
 }

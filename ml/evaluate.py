@@ -16,12 +16,22 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
-    from .features import HistoryValidationError, load_history_full
+    from .features import (
+        SUPPORTED_ASSETS as _SUPPORTED_ASSET_META,
+        HistoryValidationError,
+        load_history_full,
+    )
 except ImportError:  # pragma: no cover - used when invoked as `python ml/evaluate.py`
-    from features import HistoryValidationError, load_history_full  # type: ignore
+    from features import (  # type: ignore
+        SUPPORTED_ASSETS as _SUPPORTED_ASSET_META,
+        HistoryValidationError,
+        load_history_full,
+    )
 
 
-SUPPORTED_ASSETS = ("btc", "eth")
+# Derived from features.SUPPORTED_ASSETS so the model set never drifts between
+# training and evaluation.
+SUPPORTED_ASSETS = tuple(_SUPPORTED_ASSET_META)
 FLAT_THRESHOLD = 0.005
 ACCURACY_WINDOW_DAYS = 7
 MIN_ACCURACY_SAMPLES = 20

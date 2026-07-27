@@ -11,6 +11,7 @@ import {
   createFreshSnapshot,
   formatMexicoCityTimestamp,
 } from '../netlify/lib/market-contract.mjs';
+import { fillPrices, fillArtifactAssets, fillAccuracyAssets, ASSET_KEYS } from './asset-fixtures.mjs';
 
 const HOUR = 60 * 60 * 1000;
 const w = (ms) => Math.floor(ms / 1000) * 1000;
@@ -39,9 +40,15 @@ function anchoredSnapshot(now = w(Date.now())) {
     timezone: 'America/Mexico_City', currency: 'usd', horizon_hours: 48, step_hours: 1,
     direction_policy: { horizon_hours: 48, flat_threshold_return: 0.005 },
     producer: { model_id: 'test', code_revision: revision, run_id: runId },
-    assets: { btc: asset('bitcoin', 'BTC'), eth: asset('ethereum', 'ETH') },
+    assets: fillArtifactAssets(
+      { btc: asset('bitcoin', 'BTC'), eth: asset('ethereum', 'ETH') },
+      (a, id, symbol) => asset(id, symbol),
+    ),
   };
-  const prices = { btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() }, eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() } };
+  const prices = fillPrices(
+    { btc: { price: 64000, sourceUpdatedAt: new Date(now - 60000).toISOString() }, eth: { price: 1800, sourceUpdatedAt: new Date(now - 60000).toISOString() } },
+    { sourceUpdatedAt: new Date(now - 60000).toISOString() },
+  );
   const base = createFreshSnapshot(prices, new Date(now));
   const forecast = anchorForecast(artifact, forecastArtifactStatus(artifact, new Date(now)), base, formatMexicoCityTimestamp);
   return createFreshSnapshot(prices, new Date(now), forecast);
@@ -86,12 +93,12 @@ function fakeStore(seed = {}, { failReads = false, failWrites = false, onFirstRe
   };
 }
 
-test('recordPredictions appends two records on first run and writes once', async () => {
+test('recordPredictions appends one record per asset on first run and writes once', async () => {
   const store = fakeStore();
   const added = await recordPredictions(store, anchoredSnapshot());
-  assert.equal(added, 2);
+  assert.equal(added, ASSET_KEYS.length);
   assert.equal(store.writes, 1);
-  assert.equal(store.blobs.get(LOG_CURRENT_KEY).value.length, 2);
+  assert.equal(store.blobs.get(LOG_CURRENT_KEY).value.length, ASSET_KEYS.length);
 });
 
 test('a concurrent write between read and write is retried, not lost', async () => {
@@ -107,7 +114,7 @@ test('a concurrent write between read and write is retried, not lost', async () 
     },
   });
   const added = await recordPredictions(store, snapshot);
-  assert.equal(added, 2);
+  assert.equal(added, ASSET_KEYS.length);
   const finalLog = store.blobs.get(LOG_CURRENT_KEY).value;
   const ids = finalLog.map((r) => r.id);
   assert.ok(ids.includes('other:2020-01-01T00:00:00Z:48'), 'the concurrent record survives');
@@ -140,7 +147,7 @@ test('a predictions-store read outage does not throw or write', async () => {
 test('readAccuracyBlock returns the stored block or degrades to unavailable', async () => {
   const good = {
     status: 'available', window_days: 7, measured_through: formatMexicoCityTimestamp(new Date()),
-    assets: { btc: { status: 'available', hit_rate: 55.0, sample_size: 40 }, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 3 } },
+    assets: fillAccuracyAssets({ btc: { status: 'available', hit_rate: 55.0, sample_size: 40 }, eth: { status: 'insufficient_data', hit_rate: null, sample_size: 3 } }),
   };
   assert.deepEqual(await readAccuracyBlock(fakeStore({ [ACCURACY_KEY]: good })), good);
   assert.deepEqual(await readAccuracyBlock(fakeStore()), { status: 'unavailable' });
