@@ -6,9 +6,16 @@ export const CHAT_RATE_LIMIT_STORE = "chat-rate-limit";
 export const CHAT_RATE_LIMIT_KEY = "limits/current.json";
 export const CHAT_RATE_LIMIT_SCHEMA_VERSION = "chat-rate-limit/1.0";
 export const SESSION_WINDOW_MS = 10 * 60 * 1_000;
-export const SESSION_REQUEST_LIMIT = 4;
-export const GLOBAL_TOKENS_PER_MINUTE = 5_000;
-export const GLOBAL_TOKENS_PER_DAY = 100_000;
+export const SESSION_REQUEST_LIMIT = 8;
+// These budgets are spent in units of estimateChatTokenCost, which counts the
+// system-prompt byte cap as if every byte were a token — a deliberate upper
+// bound, roughly 4x the real usage. They must therefore be sized against that
+// worst case, not against real token counts: the per-minute budget has to fit
+// several whole requests, or the first caller of every minute is refused.
+// Reference point: the Groq free tier allows 30k tokens/min and 14,400
+// requests/day, so these stay well inside it.
+export const GLOBAL_TOKENS_PER_MINUTE = 30_000;
+export const GLOBAL_TOKENS_PER_DAY = 1_000_000;
 export const CHAT_MESSAGE_OVERHEAD_TOKENS = 64;
 
 function isRecord(value) {

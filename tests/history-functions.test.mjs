@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createHistoryHandler, readHistory } from '../netlify/functions/history.mjs';
+import {
+  DEFAULT_RESPONSE_DAYS,
+  createHistoryHandler,
+  readHistory,
+  trimHistory,
+} from '../netlify/functions/history.mjs';
 import {
   createRefreshHistoryHandler,
   runHistoryRefresh,
@@ -34,7 +39,7 @@ function makeStore(seed = {}, { failReads = false, failWrites = false } = {}) {
   };
 }
 
-test('refresh stores a 30-day window per asset', async () => {
+test('refresh stores the full model window per asset', async () => {
   const store = makeStore();
   const calls = [];
   const results = await runHistoryRefresh({
@@ -159,4 +164,50 @@ test('a foreign asset document is not served under the wrong key', () => {
   const ethDocument = createHistoryDocument({ asset: 'eth', points: POINTS });
   assert.equal(isValidHistoryDocument(ethDocument, 'btc'), false);
   assert.ok(isValidHistoryDocument(ethDocument, 'eth'));
+});
+
+// The blob keeps the model's full 90-day window, but the dashboard draws 30 and
+// loads every asset at once, so the default response is trimmed.
+function longHistory(days) {
+  const end = Date.parse('2026-07-15T00:00:00.000Z');
+  const points = [];
+  for (let hour = days * 24; hour >= 0; hour -= 1) {
+    points.push({
+      timestamp: new Date(end - hour * 3_600_000).toISOString(),
+      price: 60_000 + hour,
+    });
+  }
+  return createHistoryDocument({ asset: 'btc', points });
+}
+
+test('the stored window is longer than the one served by default', () => {
+  assert.ok(
+    HISTORY_DAYS > DEFAULT_RESPONSE_DAYS,
+    'the model needs more history than the page draws',
+  );
+});
+
+test('history responses are trimmed to 30 days unless the full window is asked for', async () => {
+  const document = longHistory(HISTORY_DAYS);
+  const store = makeStore({ [historyKey('btc')]: document });
+  const handler = createHistoryHandler({ getStoreFn: () => store });
+
+  const trimmed = await (await handler(
+    new Request('http://localhost/api/history?asset=btc'),
+  )).json();
+  const full = await (await handler(
+    new Request('http://localhost/api/history?asset=btc&days=full'),
+  )).json();
+
+  assert.equal(full.points.length, document.points.length);
+  assert.ok(trimmed.points.length < full.points.length);
+  assert.equal(trimmed.points.length, DEFAULT_RESPONSE_DAYS * 24 + 1);
+  // Trimming keeps the newest data, which is what the chart draws.
+  assert.deepEqual(trimmed.points.at(-1), full.points.at(-1));
+});
+
+test('trimming never empties a series it cannot date', () => {
+  const undated = { points: [{ timestamp: 'not-a-date', price: 1 }] };
+  assert.equal(trimHistory(undated, 30).points.length, 1);
+  assert.deepEqual(trimHistory({ points: [] }, 30).points, []);
 });

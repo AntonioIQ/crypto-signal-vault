@@ -4,13 +4,18 @@ import { ASSETS, fetchMarketChart } from "../lib/coingecko.mjs";
 import { createHistoryDocument } from "../lib/market-contract.mjs";
 import { MARKET_DATA_STORE } from "./predict.mjs";
 
-export const HISTORY_DAYS = 30;
+// 90 days is the longest window CoinGecko still serves hourly on the free tier.
+// The model needs it: at a 48h horizon, 30 days only contains ~15 windows that
+// do not overlap, so the measured confidence rests on very few independent
+// tests. 90 days triples that. The browser is served a 30-day slice instead
+// (see functions/history.mjs) so the page stays light.
+export const HISTORY_DAYS = 90;
 
 export function historyKey(asset) {
   return `history/${asset}.json`;
 }
 
-// Refetches the whole 30-day window instead of appending the newest point:
+// Refetches the whole window instead of appending the newest point:
 // overwriting is idempotent and self-healing, so a missed run leaves no gap to
 // reconcile. Cost is ~240 CoinGecko calls/month against a 10k/month allowance.
 export async function runHistoryRefresh({
