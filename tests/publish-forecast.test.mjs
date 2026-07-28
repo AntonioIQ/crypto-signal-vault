@@ -401,3 +401,18 @@ test('daily workflow gates the job to the main branch', async () => {
   );
   assert.match(workflow, /^\s{4}if: github\.ref == 'refs\/heads\/main'$/m);
 });
+
+// The workflow used to pin --validation-origins 40, which silently overrode the
+// value in train.py: raising the constant changed nothing in production and the
+// published artifact kept 40 scenarios. Model parameters belong to the model.
+test('the workflow does not pin model parameters over train.py', async () => {
+  const workflow = await readFile(
+    new URL('../.github/workflows/train.yml', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(
+    workflow,
+    /--validation-origins/,
+    'let train.py own the number of validation origins',
+  );
+});

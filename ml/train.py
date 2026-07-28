@@ -743,7 +743,10 @@ def _parser() -> argparse.ArgumentParser:
         "--validation-origins",
         type=int,
         default=DEFAULT_VALIDATION_ORIGINS,
-        help="Maximum recent rolling-origin 48h folds (default: 40).",
+        help=(
+            "Rolling-origin 48h folds, spread across the usable window "
+            f"(default: {DEFAULT_VALIDATION_ORIGINS})."
+        ),
     )
     return parser
 

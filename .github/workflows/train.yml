@@ -78,8 +78,7 @@ jobs:
             --history-dir "${RUNNER_TEMP}/history" \
             --output "${RUNNER_TEMP}/forecast/latest.json" \
             --generated-at "$(date --iso-8601=seconds)" \
-            --code-revision "${GITHUB_SHA}" \
-            --validation-origins 40
+            --code-revision "${GITHUB_SHA}"
 
       - name: Run Node.js tests
         run: npm test
