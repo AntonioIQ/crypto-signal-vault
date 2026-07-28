@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   CHAT_RATE_LIMIT_KEY,
   CHAT_RATE_LIMIT_SCHEMA_VERSION,
+  SESSION_REQUEST_LIMIT,
   SESSION_WINDOW_MS,
   assertValidRateLimitState,
   estimateChatTokenCost,
@@ -36,9 +37,9 @@ test("quota stores only a hash and reserves session plus global tokens atomicall
   assert.equal(JSON.stringify(state).includes(SESSION_A), false);
 });
 
-test("session layer allows four questions and blocks the fifth without draining global quota", async () => {
+test("session layer allows its whole allowance and blocks the next without draining global quota", async () => {
   const store = makeCasStore();
-  for (let index = 0; index < 4; index += 1) {
+  for (let index = 0; index < SESSION_REQUEST_LIMIT; index += 1) {
     const result = await reserveChatQuota({ store, sessionId: SESSION_A, tokenCost: 500, now: NOW });
     assert.equal(result.allowed, true);
   }
@@ -46,7 +47,7 @@ test("session layer allows four questions and blocks the fifth without draining 
   const blocked = await reserveChatQuota({ store, sessionId: SESSION_A, tokenCost: 500, now: NOW });
   assert.deepEqual(blocked.layer, "session");
   assert.equal(blocked.allowed, false);
-  assert.equal(storedState(store).global.day_tokens, 2_000);
+  assert.equal(storedState(store).global.day_tokens, 500 * SESSION_REQUEST_LIMIT);
   assert.equal(store.writes, writesBefore);
 });
 
@@ -149,18 +150,22 @@ test("token reservation is tied to the bounded system prompt, UTF-8 question, an
   assert.ok(emoji > ascii);
 });
 
-test("five concurrent reservations keep the exact session and global limits", async () => {
+// Concurrency here is about compare-and-swap losing no update, so it stays
+// within the retry budget of updateJsonWithRetry; the session cap itself is
+// covered by the sequential test above.
+test("concurrent reservations lose no update", async () => {
   const store = makeCasStore();
-  const decisions = await Promise.all(Array.from({ length: 5 }, () => reserveChatQuota({
+  const attempts = 5;
+  assert.ok(attempts <= SESSION_REQUEST_LIMIT, "keep every attempt inside the session cap");
+  const decisions = await Promise.all(Array.from({ length: attempts }, () => reserveChatQuota({
     store,
     sessionId: SESSION_A,
     tokenCost: 500,
     now: NOW,
   })));
-  assert.equal(decisions.filter((item) => item.allowed).length, 4);
-  assert.equal(decisions.filter((item) => !item.allowed).length, 1);
-  assert.equal(storedState(store).global.day_tokens, 2_000);
-  assert.equal(storedState(store).sessions[sessionHash(SESSION_A)].requests, 4);
+  assert.equal(decisions.filter((item) => item.allowed).length, attempts);
+  assert.equal(storedState(store).global.day_tokens, 500 * attempts);
+  assert.equal(storedState(store).sessions[sessionHash(SESSION_A)].requests, attempts);
 });
 
 test("UTC day rollover resets the daily budget", async () => {
@@ -172,4 +177,61 @@ test("UTC day rollover resets the daily budget", async () => {
   assert.equal(result.allowed, true);
   assert.equal(storedState(store).global.day_bucket, "2026-07-22");
   assert.equal(storedState(store).global.day_tokens, 1_000);
+});
+
+// Regression guard. The prompt budget grew from 2,200 to 7,000 bytes when the
+// site went from 2 coins to 11, which pushed the estimated cost of a single
+// question (7,294) past the 5,000 token-per-minute budget — so every caller,
+// including the first one of any minute, was refused with 429 and the chat was
+// dead in production while every unit test still passed. The budgets and the
+// estimator must be checked against each other, not just in isolation.
+test("a single worst-case question fits inside the global budgets", async () => {
+  const { MAX_ANALYST_SYSTEM_PROMPT_BYTES } = await import(
+    "../netlify/lib/analyst-prompt.mjs"
+  );
+  const { GROQ_MAX_OUTPUT_TOKENS } = await import("../netlify/lib/groq-client.mjs");
+  const {
+    GLOBAL_TOKENS_PER_MINUTE,
+    GLOBAL_TOKENS_PER_DAY,
+    SESSION_REQUEST_LIMIT,
+  } = await import("../netlify/lib/chat-rate-limit.mjs");
+
+  const worstCase = estimateChatTokenCost("x".repeat(400), {
+    maxSystemPromptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+    maxOutputTokens: GROQ_MAX_OUTPUT_TOKENS,
+  });
+
+  assert.ok(
+    worstCase <= GLOBAL_TOKENS_PER_MINUTE,
+    `one question costs ${worstCase} tokens but the minute budget is ${GLOBAL_TOKENS_PER_MINUTE}: every request would be refused`,
+  );
+  // One visitor exhausting their session must not exhaust the whole minute.
+  assert.ok(
+    worstCase * SESSION_REQUEST_LIMIT > GLOBAL_TOKENS_PER_MINUTE,
+    "the session limit should be the first thing a single visitor meets",
+  );
+  assert.ok(
+    GLOBAL_TOKENS_PER_DAY >= worstCase * 100,
+    `the daily budget only allows ${Math.floor(GLOBAL_TOKENS_PER_DAY / worstCase)} questions for the whole site`,
+  );
+});
+
+test("a fresh session is served rather than refused on its first question", async () => {
+  const { MAX_ANALYST_SYSTEM_PROMPT_BYTES } = await import(
+    "../netlify/lib/analyst-prompt.mjs"
+  );
+  const { GROQ_MAX_OUTPUT_TOKENS } = await import("../netlify/lib/groq-client.mjs");
+  const store = makeCasStore();
+
+  const decision = await reserveChatQuota({
+    store,
+    sessionId: SESSION_A,
+    tokenCost: estimateChatTokenCost("¿Qué espera el modelo?", {
+      maxSystemPromptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+      maxOutputTokens: GROQ_MAX_OUTPUT_TOKENS,
+    }),
+    now: NOW,
+  });
+
+  assert.equal(decision.allowed, true, "the first question of a new session must go through");
 });
