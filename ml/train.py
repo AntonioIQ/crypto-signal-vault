@@ -38,7 +38,11 @@ STEP_HOURS = 1
 FLAT_THRESHOLD_RETURN = 0.005
 CONFIDENCE_METHOD = "rolling_origin_48h_residuals"
 MIN_CONFIDENCE_SAMPLES = 20
-DEFAULT_VALIDATION_ORIGINS = 40
+# One origin per day of the 90-day window. The horizon is 48h, so the window
+# holds ~45 non-overlapping tests; 90 evenly spread origins cover all of it at
+# two per disjoint window, without pretending to more independent evidence than
+# 90 days of history can hold.
+DEFAULT_VALIDATION_ORIGINS = 90
 DEFAULT_MIN_TRAIN_POINTS = 168
 MAX_SOURCE_AGE = timedelta(hours=12)
 MAX_REFERENCE_SKEW = timedelta(hours=1)
@@ -222,10 +226,21 @@ def rolling_origin_residuals(
     first_origin = min_train_points - 1
     if last_origin < first_origin:
         return []
-    selected_first = max(first_origin, last_origin - max_origins + 1)
+
+    # Origins are spread evenly across the whole usable range instead of taken
+    # consecutively from the end. Consecutive hourly origins share 47 of their
+    # 48 forecast hours, so a run of N of them only ever tests the last N+48
+    # hours: the confidence would describe the last few days, not the window.
+    span = last_origin - first_origin + 1
+    count = min(max_origins, span)
+    if count == 1:
+        origins = [last_origin]
+    else:
+        step = (span - 1) / (count - 1)
+        origins = sorted({first_origin + round(index * step) for index in range(count)})
 
     residuals: list[float] = []
-    for origin in range(selected_first, last_origin + 1):
+    for origin in origins:
         training_fold = tuple(history[: origin + 1])
         predicted_path = forecast_prices(
             training_fold,

@@ -52,7 +52,7 @@ jobs:
           for asset in ${assets}; do
             if ! curl --fail --silent --show-error --location \
               --retry 3 --retry-all-errors --connect-timeout 10 --max-time 60 \
-              "https://likelycoin.netlify.app/api/history?asset=${asset}" \
+              "https://likelycoin.netlify.app/api/history?asset=${asset}&days=full" \
               --output "${RUNNER_TEMP}/history/${asset}.json"; then
               echo "production history missing for ${asset}; using committed seeds for all assets"
               use_seed=1

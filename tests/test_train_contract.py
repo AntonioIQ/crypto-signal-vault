@@ -153,10 +153,39 @@ class RollingOriginTests(unittest.TestCase):
         )
 
         self.assertEqual(5, len(residuals))
-        self.assertEqual([28, 29, 30, 31, 32], [len(fold) for fold in fitted_histories])
+        # Origins are spread across the whole usable range, not taken as a
+        # consecutive run off the end: with 80 points, a 48h horizon and a
+        # 10-point minimum the usable origins are 9..31, sampled evenly.
+        self.assertEqual([10, 16, 21, 26, 32], [len(fold) for fold in fitted_histories])
+        # Whatever the spacing, a fold may never see its own outcome.
         for fold in fitted_histories:
             self.assertEqual(history[len(fold) - 1], fold[-1])
             self.assertNotIn(history[len(fold)], fold)
+
+    def test_origins_span_the_window_instead_of_only_its_tail(self) -> None:
+        # Consecutive hourly origins would all sit within the last hours of the
+        # series, so the measured confidence would describe only the final days.
+        history = points(600)
+        fitted_histories: list[tuple[PricePoint, ...]] = []
+
+        rolling_origin_residuals(
+            history,
+            linear_factory(fitted_histories),
+            min_train_points=168,
+            max_origins=20,
+        )
+
+        sizes = [len(fold) for fold in fitted_histories]
+        first_usable = 168
+        last_usable = len(history) - 48
+        self.assertEqual(first_usable, sizes[0])
+        self.assertEqual(last_usable, sizes[-1])
+        # Evenly spread: the earliest fold sits near the start of the usable
+        # range, not bunched against the end with the others.
+        span = last_usable - first_usable
+        self.assertGreater(span, 0)
+        self.assertLess(sizes[1] - sizes[0], span)
+        self.assertEqual(sorted(set(sizes)), sizes)
 
     def test_folds_use_only_the_recent_contiguous_suffix_after_an_old_gap(self) -> None:
         recent_start = START + timedelta(hours=20)

@@ -28,6 +28,34 @@ export async function readHistory(asset, { getStoreFn = getStore } = {}) {
   return null;
 }
 
+// The stored window is 90 days because the model needs it, but the dashboard
+// only draws 30 and loads every asset at once — shipping the whole window to a
+// browser would trade ~1.5 MB for pixels nobody sees. Callers that need all of
+// it (the training workflow) ask for it explicitly with ?days=full.
+export const DEFAULT_RESPONSE_DAYS = 30;
+
+export function trimHistory(document, days) {
+  const points = document?.points ?? [];
+  if (days === "full" || !points.length) return document;
+
+  const newest = Date.parse(points[points.length - 1].timestamp);
+  if (!Number.isFinite(newest)) return document;
+
+  const cutoff = newest - days * 24 * 60 * 60 * 1000;
+  const trimmed = points.filter((point) => Date.parse(point.timestamp) >= cutoff);
+
+  // Never answer with an empty series just because timestamps looked odd.
+  return trimmed.length ? { ...document, points: trimmed } : document;
+}
+
+function requestedDays(url) {
+  const raw = url.searchParams.get("days");
+  if (raw === "full") return "full";
+  const parsed = Number.parseInt(raw ?? "", 10);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  return DEFAULT_RESPONSE_DAYS;
+}
+
 export function createHistoryHandler(dependencies = {}) {
   return async function historyHandler(request) {
     if (request.method !== "GET") {
@@ -37,7 +65,8 @@ export function createHistoryHandler(dependencies = {}) {
       });
     }
 
-    const asset = new URL(request.url).searchParams.get("asset");
+    const url = new URL(request.url);
+    const asset = url.searchParams.get("asset");
 
     if (!asset || !Object.hasOwn(ASSETS, asset)) {
       return new Response(JSON.stringify({ error: "Unknown asset" }), {
@@ -57,7 +86,7 @@ export function createHistoryHandler(dependencies = {}) {
       });
     }
 
-    return new Response(JSON.stringify(document), {
+    return new Response(JSON.stringify(trimHistory(document, requestedDays(url))), {
       status: 200,
       headers: JSON_HEADERS,
     });
