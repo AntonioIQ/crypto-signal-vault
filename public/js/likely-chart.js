@@ -1,9 +1,12 @@
 // LikelyCoin — bespoke SVG chart (no charting library). Chart-only component:
 // the dashboard owns the coin tabs and the price; this renders the chart with
-// Línea/Velas/Comparar modes, a forecast on/off toggle, a volume toggle and a
-// daily-range band toggle, plus a 24h stats strip. Candles are real daily OHLC
-// bucketed from the hourly history; the forecast is the anchored 48h path.
-// Colors come from the site CSS variables so it matches the theme.
+// Línea / Velas / Comparar modes, a forecast on/off toggle, a volume toggle and
+// a daily-range band toggle, plus a 24h stats strip.
+//
+// Candles are real daily OHLC bucketed from the hourly history. "Comparar"
+// normalizes any set of coins to percent-from-day-0 so coins priced $65,000 and
+// $0.0000005 can share one axis, and each one can show its own 48h forecast as a
+// dashed line in its own color. Colors come from the site CSS variables.
 
 import { fmtPrice, fmtCompact, fmtPct } from './format.js';
 
@@ -11,6 +14,11 @@ const W = 720;
 const H = 300;
 const PAD = { l: 8, r: 8, t: 14 };
 const PRICE_H = 240;
+const MAX_COMPARE = 4;
+
+// Series colors, in assignment order. Green stays first: it is the site's
+// "real data" color and the compare lines are all real measured history.
+const SERIES_COLORS = ['--accent', '--compare-2', '--compare-3', '--forecast'];
 
 const dayFmt = new Intl.DateTimeFormat('es-MX', {
   timeZone: 'America/Mexico_City', day: 'numeric', month: 'short',
@@ -66,14 +74,14 @@ export function stats24h(points) {
   };
 }
 
-// Rebase a price series to 100 at its first point, for a fair overlay of coins
-// with wildly different absolute prices.
-function rebased(points) {
+// Percent from the first point of the window: the only fair way to overlay
+// coins whose absolute prices differ by orders of magnitude.
+export function rebasedPct(points) {
   const valid = sortedValid(points);
   if (valid.length < 2) return null;
   const base = valid[0].price;
   if (!(base > 0)) return null;
-  return valid.map((p) => (p.price / base) * 100);
+  return { base, values: valid.map((p) => (p.price / base - 1) * 100) };
 }
 
 function forecastPath(snapshot, asset) {
@@ -92,40 +100,94 @@ export function mountLikelyChart(container, { snapshot, histories }) {
       <div class="lk-modes" role="tablist" aria-label="Tipo de gráfica">
         <button class="lk-mode" data-mode="line" role="tab">Línea</button>
         <button class="lk-mode active" data-mode="candle" role="tab" aria-selected="true">Velas</button>
-        <button class="lk-mode" data-mode="compare" role="tab">BTC vs ETH</button>
+        <button class="lk-mode" data-mode="compare" role="tab">Comparar</button>
       </div>
       <button class="lk-fc-toggle on" data-toggle="fc" aria-pressed="true"><span class="lk-fc-sw"></span>Pronóstico 48 h</button>
       <button class="lk-fc-toggle lk-vol-toggle on" data-toggle="vol" aria-pressed="true"><span class="lk-vol-sw"></span>Volumen</button>
       <button class="lk-fc-toggle lk-rng-toggle" data-toggle="rng" aria-pressed="false"><span class="lk-vol-sw"></span>Rango diario</button>
+    </div>
+    <div class="lk-compare-row" hidden>
+      <span class="lk-compare-label">Comparar</span>
+      <div class="lk-compare-chips"></div>
+      <span class="lk-compare-hint"><span class="lk-dash-sw"></span>Pronóstico de cada moneda</span>
     </div>
     <div class="lk-stats" aria-live="polite"></div>
     <div class="lk-cw">
       <svg class="lk-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Gráfica de precio y pronóstico"></svg>
       <div class="lk-tip" hidden></div>
     </div>
+    <div class="lk-legend"></div>
     <p class="lk-note chart-note"></p>`;
 
   const svg = container.querySelector('.lk-svg');
   const tip = container.querySelector('.lk-tip');
   const note = container.querySelector('.lk-note');
   const statsEl = container.querySelector('.lk-stats');
-  const state = { asset: 'btc', mode: 'candle', showFc: true, showVol: true, showRange: false };
+  const legendEl = container.querySelector('.lk-legend');
+  const compareRow = container.querySelector('.lk-compare-row');
+  const chipsEl = container.querySelector('.lk-compare-chips');
+
+  const state = {
+    asset: 'btc',
+    mode: 'candle',
+    showFc: true,
+    showVol: true,
+    showRange: false,
+    compare: new Set(),
+    compareForecast: new Set(),
+  };
+
+  const assetsMeta = () => snapshot?.assets ?? {};
+  const symbolOf = (a) => assetsMeta()[a]?.symbol ?? a.toUpperCase();
+  const cssColor = (name) => (name.startsWith('--') ? `var(${name})` : name);
+
+  // The coin currently selected always takes the green so it matches its own
+  // price card; the rest keep a stable color from the sorted order.
+  function compareColors() {
+    const sorted = [...state.compare].sort();
+    const ordered = sorted.includes(state.asset)
+      ? [state.asset, ...sorted.filter((a) => a !== state.asset)]
+      : sorted;
+    const map = new Map();
+    ordered.forEach((a, i) => map.set(a, cssColor(SERIES_COLORS[i % SERIES_COLORS.length])));
+    return map;
+  }
+
+  function ensureCompareDefaults() {
+    if (state.compare.size > 0) return;
+    const all = Object.keys(assetsMeta());
+    const seed = [state.asset, ...all.filter((a) => a !== state.asset)].slice(0, 3);
+    for (const a of seed) {
+      if (histories[a]) {
+        state.compare.add(a);
+        state.compareForecast.add(a);
+      }
+    }
+  }
 
   function chip(label, value, cls = '') {
     return `<span class="lk-chip"><span class="lk-chip-k">${label}</span><span class="lk-chip-v ${cls}">${value}</span></span>`;
   }
 
+  function renderChips() {
+    const colors = compareColors();
+    const all = Object.keys(assetsMeta());
+    chipsEl.innerHTML = all.map((a) => {
+      const on = state.compare.has(a);
+      const fcOn = state.compareForecast.has(a);
+      const color = colors.get(a);
+      const style = on ? `background:color-mix(in srgb, ${color} 16%, transparent); color:${color};` : '';
+      return `<button type="button" class="lk-cchip${on ? ' on' : ''}" data-coin="${a}" aria-pressed="${on}" style="${style}">` +
+        `<b>${on ? '●' : '○'}</b>${symbolOf(a)}` +
+        (on
+          ? `<span class="lk-cfc${fcOn ? ' on' : ''}" data-fc="${a}" role="switch" aria-checked="${fcOn}" title="Mostrar u ocultar el pronóstico de ${symbolOf(a)}"><span class="lk-dash-sw"></span>48 h</span>`
+          : '') +
+        `</button>`;
+    }).join('');
+  }
+
   function renderStats() {
-    if (state.mode === 'compare') {
-      const parts = [['btc', 'BTC'], ['eth', 'ETH']].map(([a, sym]) => {
-        const reb = rebased(histories[a]?.points ?? []);
-        if (!reb) return chip(sym, '—');
-        const perf = reb.at(-1) - 100;
-        return chip(`${sym} · 30 d`, fmtPct(perf), perf >= 0 ? 'up' : 'down');
-      });
-      statsEl.innerHTML = parts.join('');
-      return;
-    }
+    if (state.mode === 'compare') { statsEl.innerHTML = ''; return; }
     const s = stats24h(histories[state.asset]?.points ?? []);
     if (!s) { statsEl.innerHTML = ''; return; }
     statsEl.innerHTML = [
@@ -174,31 +236,65 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     };
   }
 
-  // "BTC vs ETH": both rebased to 100, plotted by index fraction so slightly
-  // different lengths still align end to end.
+  // Every selected coin as percent-from-day-0, plus (optionally) its own 48h
+  // forecast continued from its last real point in the same units.
   function compareScales() {
-    const a = rebased(histories.btc?.points ?? []);
-    const b = rebased(histories.eth?.points ?? []);
-    if (!a || !b) return null;
-    const all = [...a, ...b];
-    const lo = Math.min(...all, 100) * 0.995;
-    const hi = Math.max(...all, 100) * 1.005;
+    const colors = compareColors();
+    const series = [];
+    for (const asset of [...state.compare].sort()) {
+      const reb = rebasedPct(histories[asset]?.points ?? []);
+      if (!reb) continue;
+      const entry = {
+        asset,
+        symbol: symbolOf(asset),
+        color: colors.get(asset),
+        values: reb.values,
+        forecast: null,
+      };
+      if (state.compareForecast.has(asset)) {
+        const fc = forecastPath(snapshot, asset);
+        if (fc) {
+          // The dashed line continues from the coin's last measured percent,
+          // scaled by the forecast's own returns against its anchor price.
+          const lastPct = reb.values.at(-1);
+          entry.forecast = fc.prices.map(
+            (p) => lastPct + ((p / fc.anchor) - 1) * 100,
+          );
+        }
+      }
+      series.push(entry);
+    }
+    if (!series.length) return null;
+
+    const maxHist = Math.max(...series.map((s) => s.values.length));
+    const maxFc = Math.max(0, ...series.map((s) => s.forecast?.length ?? 0));
+    const all = series.flatMap((s) => [...s.values, ...(s.forecast ?? [])]);
+    const lo = Math.min(...all, 0);
+    const hi = Math.max(...all, 0);
+    const padY = (hi - lo) * 0.08 || 1;
     const iw = W - PAD.l - PAD.r;
     const priceH = PRICE_H;
+    // Histories can differ by a point or two; map each series onto the same
+    // 0..1 span so they start and end together, then reserve the tail for the
+    // forecast horizon.
+    const fcSpan = maxFc > 0 ? 0.16 : 0;
     return {
-      a, b, lo, hi, priceH,
-      XA: (i) => PAD.l + (i / (a.length - 1)) * iw,
-      XB: (i) => PAD.l + (i / (b.length - 1)) * iw,
-      Y: (v) => PAD.t + priceH - ((v - lo) / (hi - lo)) * priceH,
+      series, maxHist, maxFc, priceH,
+      lo: lo - padY,
+      hi: hi + padY,
+      XH: (i, n) => PAD.l + (n > 1 ? (i / (n - 1)) * iw * (1 - fcSpan) : 0),
+      XF: (i, n) => PAD.l + iw * (1 - fcSpan) + (n > 1 ? ((i + 1) / n) * iw * fcSpan : 0),
+      Y: (v) => PAD.t + priceH - ((v - (lo - padY)) / ((hi + padY) - (lo - padY))) * priceH,
     };
   }
 
   function drawCompare(animate) {
     const s = compareScales();
     svg._s = null; svg._c = s;
+    legendEl.innerHTML = '';
     if (!s) {
       svg.innerHTML = '';
-      note.textContent = 'Faltan datos de BTC o ETH para comparar.';
+      note.textContent = 'Elige al menos una moneda para comparar.';
       return;
     }
     let grid = '';
@@ -206,31 +302,61 @@ export function mountLikelyChart(container, { snapshot, histories }) {
       const y = PAD.t + (s.priceH / 3) * g;
       grid += `<line class="lk-grid" x1="${PAD.l}" y1="${y}" x2="${W - PAD.r}" y2="${y}"/>`;
     }
-    // baseline at 100
-    const y100 = s.Y(100);
-    grid += `<line class="lk-base" x1="${PAD.l}" y1="${y100.toFixed(1)}" x2="${W - PAD.r}" y2="${y100.toFixed(1)}"/>`;
-    const pathOf = (series, X) => series.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + s.Y(v).toFixed(1)).join(' ');
-    const body =
-      `<path class="lk-cmp lk-cmp-b" d="${pathOf(s.b, s.XB)}" stroke="var(--forecast)"/>` +
-      `<path class="lk-cmp lk-cmp-a" d="${pathOf(s.a, s.XA)}" stroke="var(--accent)"/>`;
+    const yZero = s.Y(0);
+    grid += `<line class="lk-base" x1="${PAD.l}" y1="${yZero.toFixed(1)}" x2="${W - PAD.r}" y2="${yZero.toFixed(1)}"/>`;
+
+    let body = '';
+    for (const serie of s.series) {
+      const n = serie.values.length;
+      const d = serie.values
+        .map((v, i) => `${i ? 'L' : 'M'}${s.XH(i, n).toFixed(1)} ${s.Y(v).toFixed(1)}`)
+        .join(' ');
+      body += `<path class="lk-cmp" d="${d}" stroke="${serie.color}"/>`;
+      if (serie.forecast?.length) {
+        const fn = serie.forecast.length;
+        const start = `M${s.XH(n - 1, n).toFixed(1)} ${s.Y(serie.values.at(-1)).toFixed(1)}`;
+        const fd = serie.forecast
+          .map((v, i) => `L${s.XF(i, fn).toFixed(1)} ${s.Y(v).toFixed(1)}`)
+          .join(' ');
+        body += `<path class="lk-cmp-fc" d="${start} ${fd}" stroke="${serie.color}"/>`;
+      }
+    }
+
     svg.innerHTML = `${grid}${body}
       <line class="lk-cross" x1="0" y1="${PAD.t}" x2="0" y2="${PAD.t + s.priceH}"/>`;
+
+    legendEl.innerHTML = s.series.map((serie) => {
+      const last = serie.values.at(-1);
+      const cls = last >= 0 ? 'up' : 'down';
+      return `<span class="lk-leg"><span class="lk-leg-sw" style="background:${serie.color}"></span>` +
+        `${serie.symbol}<b class="${cls}">${fmtPct(last)}</b></span>`;
+    }).join('') +
+      '<span class="lk-leg-note">Línea sólida: 30 días medidos · punteada: pronóstico 48 h de esa misma moneda</span>';
+
     if (animate) {
       requestAnimationFrame(() => {
         svg.querySelectorAll('.lk-cmp').forEach((p, k) => {
           const L = p.getTotalLength();
           p.style.strokeDasharray = L; p.style.strokeDashoffset = L; p.getBoundingClientRect();
-          p.style.transition = `stroke-dashoffset 1s cubic-bezier(.6,0,.2,1) ${k * 120}ms`;
+          p.style.transition = `stroke-dashoffset 1s cubic-bezier(.6,0,.2,1) ${k * 110}ms`;
           p.style.strokeDashoffset = 0;
         });
       });
     }
-    note.textContent = 'Ambas rebasadas a 100 hace 30 días: la línea más alta es la que más rindió. No es una recomendación.';
+    note.textContent = 'Todas rebasadas a 0 % hace 30 días: la línea más alta es la que más rindió. No es una recomendación.';
   }
 
   function draw(animate) {
     renderStats();
-    if (state.mode === 'compare') { drawCompare(animate); return; }
+    compareRow.hidden = state.mode !== 'compare';
+    container.classList.toggle('lk-compare', state.mode === 'compare');
+    if (state.mode === 'compare') {
+      ensureCompareDefaults();
+      renderChips();
+      drawCompare(animate);
+      return;
+    }
+    legendEl.innerHTML = '';
     const s = scales();
     svg._s = s; svg._c = null;
     if (!s) { svg.innerHTML = ''; note.textContent = 'Aún no hay datos para graficar.'; return; }
@@ -326,16 +452,19 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     const c = svg._c;
     if (c) { // compare mode
       const f = Math.max(0, Math.min(1, (px - PAD.l) / (W - PAD.l - PAD.r)));
-      const ia = Math.round(f * (c.a.length - 1));
-      const ib = Math.round(f * (c.b.length - 1));
       const cx = PAD.l + f * (W - PAD.l - PAD.r);
       const cross = svg.querySelector('.lk-cross');
       cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.style.opacity = 0.55;
+      const rows = c.series.map((serie) => {
+        const n = serie.values.length;
+        const i = Math.max(0, Math.min(n - 1, Math.round(f * (n - 1))));
+        const v = serie.values[i];
+        return `<span class="d"><span class="lk-leg-sw" style="background:${serie.color}"></span>${serie.symbol} ${fmtPct(v)}</span>`;
+      }).join('');
       tip.hidden = false;
-      tip.innerHTML =
-        `<b class="up">BTC ${fmtPct(c.a[ia] - 100)}</b><span class="d"><span class="fc">ETH ${fmtPct(c.b[ib] - 100)}</span></span>`;
+      tip.innerHTML = rows;
       tip.style.left = `${cx / W * r.width}px`;
-      tip.style.top = `${c.Y(Math.max(c.a[ia], c.b[ib])) / H * r.height}px`;
+      tip.style.top = `${c.Y(Math.max(...c.series.map((s2) => s2.values.at(-1)))) / H * r.height}px`;
       return;
     }
     const s = svg._s; if (!s) return;
@@ -375,8 +504,6 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     container.querySelectorAll('.lk-mode').forEach((x) => { x.classList.remove('active'); x.removeAttribute('aria-selected'); });
     m.classList.add('active'); m.setAttribute('aria-selected', 'true');
     state.mode = m.dataset.mode;
-    // Toggles that don't apply to compare mode are disabled visually.
-    container.classList.toggle('lk-compare', state.mode === 'compare');
     draw(true);
   }));
   container.querySelectorAll('[data-toggle]').forEach((btn) => btn.addEventListener('click', () => {
@@ -387,8 +514,41 @@ export function mountLikelyChart(container, { snapshot, histories }) {
     draw(false);
   }));
 
+  // Coin chips: the "48 h" sub-chip toggles only that coin's forecast, so it
+  // must not also toggle the coin itself.
+  chipsEl.addEventListener('click', (event) => {
+    const fcSwitch = event.target.closest('.lk-cfc');
+    if (fcSwitch) {
+      event.stopPropagation();
+      const asset = fcSwitch.dataset.fc;
+      if (state.compareForecast.has(asset)) state.compareForecast.delete(asset);
+      else state.compareForecast.add(asset);
+      renderChips();
+      drawCompare(false);
+      return;
+    }
+    const chipBtn = event.target.closest('.lk-cchip');
+    if (!chipBtn) return;
+    const asset = chipBtn.dataset.coin;
+    if (state.compare.has(asset)) {
+      state.compare.delete(asset);
+      state.compareForecast.delete(asset);
+    } else if (state.compare.size < MAX_COMPARE && histories[asset]) {
+      state.compare.add(asset);
+      state.compareForecast.add(asset);
+    }
+    renderChips();
+    drawCompare(true);
+  });
+
   draw(true);
   return {
-    setAsset(asset) { state.asset = asset; if (state.mode !== 'compare') draw(true); else renderStats(); },
+    setAsset(asset) {
+      state.asset = asset;
+      if (state.mode === 'compare') { renderChips(); drawCompare(false); }
+      else draw(true);
+    },
+    // Called once the remaining histories finish streaming in.
+    refresh() { draw(false); },
   };
 }

@@ -3,14 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#07110f">
-  <meta name="description" content="LikelyCoin muestra precios de Bitcoin y Ethereum con contexto simple y un pronóstico de 48 horas.">
+  <meta name="theme-color" content="#0b0c0e">
+  <meta name="description" content="LikelyCoin muestra el precio de las principales criptomonedas con contexto simple y un pronóstico de 48 horas por moneda.">
   <title>LikelyCoin — El mercado, explicado con claridad</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
   <div class="app-shell">
+    <div id="ticker" class="ticker" aria-label="Resumen del mercado" role="marquee"></div>
+
     <header class="topbar">
       <a class="brand" href="/" aria-label="LikelyCoin, inicio">
         <svg class="brand-mark" viewBox="0 0 44 44" role="img" aria-label="Señal ascendente de LikelyCoin">
@@ -34,7 +36,7 @@
       <section class="market-intro" aria-labelledby="page-title">
         <div class="intro-copy">
           <p class="eyebrow">PANORAMA EN TIEMPO REAL</p>
-          <h1 id="page-title">El mercado, explicado<br>con claridad.</h1>
+          <h1 id="page-title">El mercado, explicado <span class="accent-word">con claridad</span>.</h1>
           <p class="intro-text">Sigue el precio de las principales criptomonedas hoy. Sin ruido, sin promesas y sin lenguaje complicado.</p>
         </div>
 
@@ -43,25 +45,23 @@
 
       <section class="dashboard-grid" aria-label="Resumen del mercado">
         <article class="price-card panel" aria-labelledby="asset-name">
+          <span class="price-card-hairline" aria-hidden="true"></span>
           <div class="price-card-heading">
             <div>
               <p id="asset-ticker" class="asset-ticker">BTC · USD</p>
               <h2 id="asset-name">Bitcoin</h2>
             </div>
-            <span class="live-label">EN VIVO</span>
+            <span class="live-label"><span class="live-dot" aria-hidden="true"></span>EN VIVO</span>
           </div>
 
           <div class="price-block">
             <p class="price-label">Precio actual</p>
             <p id="price" class="price">—</p>
             <p id="change" class="change" title="Comparado con hace 24 horas"></p>
+            <svg id="spark" class="spark" viewBox="0 0 360 70" preserveAspectRatio="none" role="img" aria-label="Tendencia reciente del precio"></svg>
           </div>
 
           <dl class="price-meta">
-            <div>
-              <dt>Moneda</dt>
-              <dd>Dólar estadounidense</dd>
-            </div>
             <div>
               <dt>Frecuencia</dt>
               <dd>Cada 15 minutos</dd>
@@ -76,7 +76,7 @@
         <article class="chart-card panel">
           <div class="panel-heading">
             <div>
-              <p class="section-label">COMPORTAMIENTO RECIENTE</p>
+              <p class="section-label forecast-label">COMPORTAMIENTO RECIENTE</p>
               <h2>Precio y pronóstico · 30 días</h2>
             </div>
           </div>
@@ -84,36 +84,56 @@
         </article>
       </section>
 
-      <section class="prediction-card panel" aria-labelledby="prediction-title">
-        <div class="prediction-copy">
-          <p class="section-label">PRONÓSTICO A 48 HORAS</p>
-          <h2 id="prediction-title">Preparando la lectura más reciente.</h2>
-          <p id="prediction-body">Estamos comprobando si hay un pronóstico válido para la moneda seleccionada.</p>
-          <p class="mini-disclaimer">Esta lectura es informativa y educativa. No es una recomendación para comprar o vender.</p>
-        </div>
+      <section class="forecast-section" aria-labelledby="forecast-title">
+        <article class="forecast-table-card panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-label forecast-label">PRONÓSTICO A 48 HORAS · TODAS LAS MONEDAS</p>
+              <h2 id="forecast-title">Cada cripto tiene su propia lectura</h2>
+            </div>
+            <p class="heading-note">Ordenado por confianza medida</p>
+          </div>
+          <div id="forecast-rows" class="forecast-rows" role="table" aria-labelledby="forecast-title"></div>
+          <p class="forecast-foot">Cada fila es una lectura independiente del modelo para esa moneda. Sin señal = todavía no hay escenarios suficientes.</p>
+        </article>
 
-        <div id="signal-panel" class="signal-preview" aria-live="polite">
-          <div class="preview-row">
-            <span>Dirección probable</span>
-            <strong id="signal-direction">—</strong>
+        <aside id="signal-panel" class="signal-panel panel" aria-live="polite">
+          <p id="signal-eyebrow" class="signal-eyebrow">MONEDA SELECCIONADA</p>
+          <div class="signal-headline">
+            <span id="signal-direction">—</span>
+            <span class="signal-horizon">a 48 h</span>
           </div>
-          <div class="preview-row">
-            <span>Confianza de esta señal</span>
-            <strong id="signal-confidence">—</strong>
+          <div>
+            <div class="signal-row">
+              <span>Confianza de esta señal</span>
+              <strong id="signal-confidence">—</strong>
+            </div>
+            <div class="signal-bar"><div id="signal-bar-fill" class="signal-bar-fill"></div></div>
+            <p id="signal-scenarios" class="signal-scenarios"></p>
           </div>
-          <div class="preview-row">
+          <div class="signal-row signal-row-divider">
+            <span>Precisión medida (7 d)</span>
+            <strong id="signal-accuracy">—</strong>
+          </div>
+          <div class="signal-row">
             <span>Horizonte</span>
             <strong>48 h</strong>
           </div>
           <span id="signal-status" class="development-badge">CARGANDO</span>
-        </div>
+          <p class="mini-disclaimer">Lectura informativa y educativa. No es una recomendación para comprar o vender.</p>
+        </aside>
       </section>
 
       <section class="scenario-card panel" aria-labelledby="scenario-title">
         <div class="section-heading">
           <div>
-            <p class="section-label">DE DÓNDE SALE LA CONFIANZA</p>
-            <h2 id="scenario-title">Escenarios del modelo</h2>
+            <p class="section-label forecast-label">DE DÓNDE SALE LA CONFIANZA</p>
+            <h2 id="scenario-title">Escenarios del modelo · <span id="scenario-asset" class="accent-word">BTC</span></h2>
+          </div>
+          <div class="scenario-legend" aria-hidden="true">
+            <span class="legend-chip legend-down"><span class="legend-dot"></span>Baja</span>
+            <span class="legend-chip legend-flat"><span class="legend-dot"></span>Estable</span>
+            <span class="legend-chip legend-up"><span class="legend-dot"></span>Sube</span>
           </div>
         </div>
         <div id="scenario-mount"></div>
@@ -121,7 +141,7 @@
 
       <section id="analyst-section" class="analyst-section panel" aria-labelledby="analyst-title" hidden>
         <div class="analyst-intro">
-          <p class="section-label">LECTURA DEL MODELO</p>
+          <p class="section-label analyst-label">LECTURA DEL MODELO</p>
           <h2 id="analyst-title">Pregúntale a tu analista</h2>
           <p>Consulta el precio, el pronóstico actual o la precisión que ya medimos. Las respuestas usan únicamente los datos visibles de LikelyCoin.</p>
 
@@ -196,6 +216,23 @@
       <div class="footer-meta">
         <strong>LikelyCoin</strong>
         <p id="last-update">Última actualización: —</p>
+        <div class="footer-contact">
+          <span class="contact-name">J Antonio Tapia G</span>
+          <div class="contact-links">
+            <a href="mailto:j.anton.tg@gmail.com" aria-label="Correo" title="j.anton.tg@gmail.com" class="contact-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <rect x="3" y="5.5" width="18" height="13" rx="2.5"></rect>
+                <path d="M4 7.5l8 5.5 8-5.5"></path>
+              </svg>
+            </a>
+            <a href="https://github.com/AntonioIQ" target="_blank" rel="noopener noreferrer" aria-label="GitHub" title="github.com/AntonioIQ" class="contact-icon contact-icon-round">
+              <img src="assets/github.png" alt="" width="27" height="27">
+            </a>
+            <a href="https://www.linkedin.com/in/jos%C3%A9-antonio-tapia-godinez-a157901a/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" title="LinkedIn" class="contact-icon contact-icon-plain">
+              <img src="assets/linkedin.png" alt="" width="26" height="26">
+            </a>
+          </div>
+        </div>
       </div>
       <p class="disclaimer">Proyecto educativo de Machine Learning. La información mostrada no constituye asesoría financiera ni una recomendación de compra o venta.</p>
       <a href="https://www.coingecko.com/en/api" target="_blank" rel="noopener noreferrer">Datos proporcionados por CoinGecko</a>
