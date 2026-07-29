@@ -70,6 +70,73 @@ export function containsUngroundedExplanation(answer) {
   );
 }
 
+// Figures the analyst is allowed to state: everything the context publishes,
+// plus the fixed vocabulary of the product (the 48h horizon, the 7-day accuracy
+// window, "24 h", the 120-word cap). Anything else is a number the model made
+// up, which is the one failure this product cannot ship.
+const PRODUCT_NUMBERS = [0, 24, 30, 48, 90, 100, 120, 7];
+
+function groundedValues(context) {
+  const values = [...PRODUCT_NUMBERS];
+  const push = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      values.push(value, Math.abs(value));
+    }
+  };
+
+  for (const item of Object.values(context?.assets ?? {})) {
+    push(item.price_usd);
+    const forecast = item.forecast ?? {};
+    push(forecast.horizon_hours);
+    push(forecast.terminal_change_percent);
+    push(forecast.confidence?.percent);
+    push(forecast.confidence?.sample_size);
+    // The scenario board states "N de M escenarios", so that N is a figure the
+    // product itself publishes even though it is derived from the other two.
+    if (
+      typeof forecast.confidence?.percent === "number" &&
+      typeof forecast.confidence?.sample_size === "number"
+    ) {
+      push(Math.round((forecast.confidence.percent / 100) * forecast.confidence.sample_size));
+    }
+    const accuracy = item.accuracy ?? {};
+    push(accuracy.window_days);
+    push(accuracy.hit_rate_percent);
+    push(accuracy.sample_size);
+  }
+  return values;
+}
+
+// A stated figure counts as grounded when it is a published value, or that
+// value rounded the way a person would write it.
+function isGrounded(stated, values) {
+  return values.some((value) => {
+    if (!Number.isFinite(value)) return false;
+    if (stated === value) return true;
+    if (stated === Math.round(value)) return true;
+    if (stated === Math.round(value * 10) / 10) return true;
+    const scale = Math.max(0.05, Math.abs(value) * 0.005);
+    return Math.abs(stated - value) <= scale;
+  });
+}
+
+export function containsUngroundedNumbers(answer, context) {
+  const values = groundedValues(context);
+  // Spanish thousands separators are dots and decimals are commas as often as
+  // the reverse, so both are normalized before parsing.
+  const matches = String(answer).match(/\d[\d.,]*/g) ?? [];
+  return matches.some((raw) => {
+    const cleaned = raw.replace(/[.,]$/, "");
+    const candidates = new Set([
+      Number(cleaned.replace(/,/g, "")),
+      Number(cleaned.replace(/\./g, "").replace(",", ".")),
+    ]);
+    const parsed = [...candidates].filter(Number.isFinite);
+    if (!parsed.length) return false;
+    return !parsed.some((value) => isGrounded(value, values));
+  });
+}
+
 export function limitWords(answer, maximum = MAX_ANALYST_WORDS) {
   const words = answer.trim().split(/\s+/).filter(Boolean);
   if (words.length <= maximum) return words.join(" ");
@@ -207,9 +274,16 @@ export function finalizeAnalystResponse(answer, { question, context }) {
     typeof answer !== "string" ||
     answer.trim().length === 0 ||
     containsUnsafeAdvice(answer) ||
-    containsPromptLeak(answer) ||
-    containsUngroundedExplanation(answer)
+    containsPromptLeak(answer)
   ) {
+    return replacement();
+  }
+
+  // The analyst may now talk about the data instead of handing back a fixed
+  // string, so the guarantee moves from "it states no figures at all" to "every
+  // figure it states is one we published". A made-up number falls back to the
+  // canonical template, which is the answer that can never be wrong.
+  if (containsUngroundedNumbers(answer, context)) {
     return replacement();
   }
 

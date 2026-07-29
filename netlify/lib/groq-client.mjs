@@ -1,6 +1,10 @@
 export const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 export const GROQ_MODEL = "llama-3.3-70b-versatile";
-export const GROQ_MAX_OUTPUT_TOKENS = 180;
+// The answer is capped at 120 words, which is roughly 180 tokens in Spanish —
+// budgeting exactly that left the model no room to land its last sentence, so
+// replies were being cut mid-phrase. With headroom it finishes the thought and
+// limitWords trims cleanly at a word boundary if it ran long.
+export const GROQ_MAX_OUTPUT_TOKENS = 280;
 export const GROQ_TIMEOUT_MS = 8_000;
 
 export class GroqClientError extends Error {

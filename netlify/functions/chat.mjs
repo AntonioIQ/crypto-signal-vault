@@ -235,7 +235,17 @@ export function createChatHandler(dependencies = {}) {
 
     const context = await safeContext(readSnapshotFn);
     const intent = classifyAnalystQuestion(input.question);
-    if (intent !== ANALYST_INTENTS.EXPLANATION) {
+
+    // Only questions about our own data reach the analyst. Refusing investment
+    // advice, and refusing anything off-topic, are answered by fixed templates:
+    // neither may depend on a model behaving itself, and keeping out-of-scope
+    // text away from the provider is what stops a prompt injection from ever
+    // being answered. Everything else — price, forecast, confidence, accuracy,
+    // explanations — now goes to the analyst instead of a canned string, which
+    // is what made the chat read like a data dump.
+    // finalizeAnalystResponse still swaps the template back in if the reply
+    // drifts off the context, leaks the prompt or drops the published confidence.
+    if (intent === ANALYST_INTENTS.ADVICE || intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
       return jsonResponse(
         { answer: templateAnswer(input.question, context, intent), degraded: false },
         { origin },

@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { buildAnalystContext } from "../netlify/lib/analyst-context.mjs";
 import {
+  containsUngroundedNumbers,
   finalizeAnalystAnswer,
   templateAnswer,
 } from "../netlify/lib/analyst-fallback.mjs";
@@ -140,5 +141,41 @@ test("Groq malformed and empty responses fail closed", async () => {
       fetchFn: async () => new Response(body, { status: 200 }),
     });
     await assert.rejects(() => client.complete({ systemPrompt: "SYSTEM", question: "USER" }));
+  }
+});
+
+// The analyst may state figures now, so the line it must not cross is stating a
+// figure we never published. Rounding the way a person writes is fine.
+test("only published figures count as grounded", () => {
+  const context = buildAnalystContext(chatSnapshot());
+
+  // btc: price 65,000 · forecast +1.8 % · confidence 72.5 % over 40 scenarios
+  // accuracy 58.3 % over 96 predictions in a 7-day window.
+  for (const grounded of [
+    "Bitcoin ronda los 65,000 dólares.",
+    "Sube 1.8 % con 72.5 % de confianza.",
+    "Acertó 58.3 % de 96 lecturas en 7 días.",
+    "En 29 de sus 40 validaciones apuntó igual.",
+    "La confianza es de 73 % aproximadamente.",
+    "El horizonte es de 48 horas.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(grounded, context),
+      false,
+      `should be grounded: ${grounded}`,
+    );
+  }
+
+  for (const invented of [
+    "La precisión medida es 99 %.",
+    "Bitcoin vale 12,345 dólares.",
+    "Tiene 88 % de confianza.",
+    "Se midió sobre 500 escenarios.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(invented, context),
+      true,
+      `should be rejected: ${invented}`,
+    );
   }
 });

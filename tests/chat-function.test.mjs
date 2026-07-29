@@ -292,26 +292,47 @@ test("out-of-scope prompt injection never reaches Groq", async () => {
   assert.equal(providerCalls, 0);
 });
 
-test("price, forecast, confidence, and accuracy facts always come from canonical templates", async () => {
-  let providerCalls = 0;
+// Data questions are answered by the analyst now, so it can speak like a person
+// instead of returning a fixed string. The guarantee is no longer "the model is
+// never asked": it is that a figure the model invents can never be published.
+test("an invented figure is replaced by the canonical template", async () => {
   const handler = enabledHandler({
-    completeFn: async () => {
-      providerCalls += 1;
-      return "La precisión medida de Bitcoin es 99 %.";
-    },
+    completeFn: async () => "La precisión medida de Bitcoin es 99 %.",
   });
   const accuracy = await (await handler(chatRequest({
     question: "¿Qué precisión medida tiene Bitcoin?",
     sessionId: SESSION_ID,
   }))).json();
-  assert.match(accuracy.answer, /58\.3 % en 96 predicciones/);
-  assert.doesNotMatch(accuracy.answer, /99 %/);
 
+  assert.doesNotMatch(accuracy.answer, /99 %/, "a made-up accuracy must never reach the reader");
+  assert.match(accuracy.answer, /58\.3 % en 96 predicciones/);
+  assert.equal(accuracy.degraded, true);
+});
+
+test("an answer that only states published figures is served as written", async () => {
+  const written =
+    "En los últimos 7 días el modelo acertó 58.3 % de sus 96 lecturas de Bitcoin. "
+    + "Está apenas por encima de una moneda al aire.";
+  const handler = enabledHandler({ completeFn: async () => written });
+
+  const accuracy = await (await handler(chatRequest({
+    question: "¿Qué precisión medida tiene Bitcoin?",
+    sessionId: SESSION_ID,
+  }))).json();
+
+  assert.equal(accuracy.answer, written);
+  assert.equal(accuracy.degraded, false);
+});
+
+test("a forecast answer still has to carry its published confidence", async () => {
+  const handler = enabledHandler({
+    completeFn: async () => "Bitcoin apunta a una subida de 1.8 % en las próximas 48 horas.",
+  });
   const forecast = await (await handler(chatRequest({
     question: "¿Qué pronóstico hay para Bitcoin?",
     sessionId: SESSION_ID,
   }))).json();
-  assert.match(forecast.answer, /subida de 1\.8 %/);
-  assert.match(forecast.answer, /72\.5 %/);
-  assert.equal(providerCalls, 0);
+
+  assert.match(forecast.answer, /1\.8 %/);
+  assert.match(forecast.answer, /72\.5 %/, "the confidence is appended when the answer omits it");
 });
