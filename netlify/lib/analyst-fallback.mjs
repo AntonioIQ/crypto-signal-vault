@@ -41,12 +41,24 @@ export function mentionsForecast(answer) {
   return /predicci[oó]n|pron[oó]stico|48\s*(?:h|horas)|señal|direcci[oó]n|el modelo (?:estima|espera|ve)|apunta (?:hacia|a)/i.test(answer);
 }
 
+// Every name the configured coins answer to. Built from ASSETS so a coin added
+// to the backend is understood here too: this used to hardcode bitcoin and
+// ethereum, so after the expansion to 11 coins a question naming any of the
+// other nine was classified as off-topic and refused.
+const ASSET_TERMS = Object.entries(ASSETS)
+  .flatMap(([asset, meta]) => [asset, meta.symbol, meta.id, meta.name])
+  .map((term) => normalized(term))
+  .filter((term) => term.length > 0)
+  .sort((a, b) => b.length - a.length);
+
+const MENTIONS_ASSET = new RegExp(`\\b(?:${ASSET_TERMS.join("|")})\\b`);
+
 export function classifyAnalystQuestion(question) {
   const text = normalized(question);
   if (isAdviceQuestion(question)) return ANALYST_INTENTS.ADVICE;
   if (/\b(confianza|segura|seguro|certeza)\b/.test(text)) return ANALYST_INTENTS.CONFIDENCE;
   if (/\b(precision|aciert|acert|accuracy|resultado|medid)/.test(text)) return ANALYST_INTENTS.ACCURACY;
-  if (/\b(precio|cuesta|cotiza|valor)\b/.test(text)) return ANALYST_INTENTS.PRICE;
+  if (/\b(precio|cuesta|cuestan|cotiza|valor|vale|valen)\b/.test(text)) return ANALYST_INTENTS.PRICE;
   if (/\b(prediccion|pronostico|48\s*(?:h|horas)|direccion|subida|bajada|lectura actual)\b/.test(text)) {
     return ANALYST_INTENTS.FORECAST;
   }
@@ -55,7 +67,10 @@ export function classifyAnalystQuestion(question) {
   const unrelated = /\b(capital de|traduce|traduccion|codigo|programa|poema|receta|clima|futbol|deporte|presidente|politica|pelicula|correo|matemat|chiste|historia de)\b/.test(text);
   if (promptAttack || unrelated) return ANALYST_INTENTS.OUT_OF_SCOPE;
 
-  if (/\b(bitcoin|btc|ethereum|eth|modelo|datos|snapshot|lectura|confianza|precision|prediccion|pronostico)\b/.test(text)) {
+  if (
+    MENTIONS_ASSET.test(text) ||
+    /\b(modelo|datos|snapshot|lectura|confianza|precision|prediccion|pronostico|cripto|criptomoneda|moneda|mercado)\b/.test(text)
+  ) {
     return ANALYST_INTENTS.EXPLANATION;
   }
   return ANALYST_INTENTS.OUT_OF_SCOPE;
@@ -251,7 +266,7 @@ export function templateAnswer(
   if (intent === ANALYST_INTENTS.ADVICE) {
     answer = `No puedo decirte si debes comprar, vender o cuándo entrar. Solo describo lo que ve el modelo. ${forecastSummary(context)}. Esto es educativo y no es asesoría financiera.`;
   } else if (intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
-    answer = "Solo puedo responder sobre el precio y las mediciones actuales de Bitcoin y Ethereum que aparecen en LikelyCoin. No tengo noticias, datos externos, instrucciones ocultas ni información de otros temas.";
+    answer = `Solo puedo responder sobre el precio y las mediciones de las ${Object.keys(ASSETS).length} criptomonedas que aparecen en LikelyCoin. No tengo noticias, datos externos, instrucciones ocultas ni información de otros temas.`;
   } else if (intent === ANALYST_INTENTS.CONFIDENCE) {
     answer = `Confianza publicada: ${confidenceSummary(context)}. Describe qué tan consistente fue cada dirección en validaciones previas; no garantiza el resultado.`;
   } else if (intent === ANALYST_INTENTS.ACCURACY) {
