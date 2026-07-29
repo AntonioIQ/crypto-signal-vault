@@ -101,6 +101,22 @@ class ProphetForecaster:
             weekly_seasonality=True,
             yearly_seasonality=False,
             uncertainty_samples=0,
+            # Searched with ml/tune_priors.py on the real 90-day window, picking
+            # on the first 60 days and judging on the last 30. 0.01 was at least
+            # as good as Prophet's 0.05 default on both held-out metrics (66.0%
+            # vs 64.0% signed hit rate, 4.21% vs 4.29% magnitude error) and it
+            # is the more conservative prior, which is the right bias for a
+            # series this close to a random walk: 0.5 was clearly worse and
+            # 0.001 made the optimizer fall back to Newton.
+            #
+            # The margin over the default is inside the noise (~±7 pp on ~50
+            # signed folds), so this is not a claimed improvement — it is the
+            # cautious end of a range that measured the same.
+            changepoint_prior_scale=0.01,
+            # Left at the default deliberately: 0.1 and 10.0 produced identical
+            # held-out numbers, so the seasonality terms are not earning their
+            # keep either way and moving this would be arbitrary.
+            seasonality_prior_scale=10.0,
         )
         self._model.fit(frame)
 
