@@ -182,6 +182,9 @@ function validateDirectionalValidation(value, label) {
       "momentum_hit_rate_percent",
       "sign_folds",
       "sign_hit_rate_percent",
+      "mean_absolute_error_percent",
+      "naive_mean_absolute_error_percent",
+      "reliability",
     ],
     label,
   );
@@ -217,6 +220,63 @@ function validateDirectionalValidation(value, label) {
     if (Math.round(rate * 10) / 10 !== rate) {
       throw new ForecastContractError(`${label}.${key} must not exceed one decimal.`);
     }
+  }
+
+  for (const key of ["mean_absolute_error_percent", "naive_mean_absolute_error_percent"]) {
+    const error = block[key];
+    if (!isFiniteNumber(error) || error < 0) {
+      throw new ForecastContractError(`${label}.${key} must be a non-negative number.`);
+    }
+    if (Math.round(error * 100) / 100 !== error) {
+      throw new ForecastContractError(`${label}.${key} must not exceed two decimals.`);
+    }
+  }
+
+  // Whether a bigger predicted move is actually more often right.
+  const bands = ["small", "medium", "large"];
+  if (!Array.isArray(block.reliability) || block.reliability.length !== bands.length) {
+    throw new ForecastContractError(`${label}.reliability must list every band once.`);
+  }
+  let counted = 0;
+  block.reliability.forEach((value_, index) => {
+    const entry = requireExactObject(
+      value_,
+      ["band", "folds", "sign_folds", "sign_hit_rate_percent"],
+      `${label}.reliability[${index}]`,
+    );
+    if (entry.band !== bands[index]) {
+      throw new ForecastContractError(
+        `${label}.reliability[${index}].band must be "${bands[index]}".`,
+      );
+    }
+    if (!Number.isInteger(entry.folds) || entry.folds < 0) {
+      throw new ForecastContractError(`${label}.reliability[${index}].folds must be an integer.`);
+    }
+    if (
+      !Number.isInteger(entry.sign_folds) ||
+      entry.sign_folds < 0 ||
+      entry.sign_folds > entry.folds
+    ) {
+      throw new ForecastContractError(
+        `${label}.reliability[${index}].sign_folds must fit inside folds.`,
+      );
+    }
+    const rate = entry.sign_hit_rate_percent;
+    if (rate === null) {
+      if (entry.sign_folds !== 0) {
+        throw new ForecastContractError(
+          `${label}.reliability[${index}].sign_hit_rate_percent must be a percentage.`,
+        );
+      }
+    } else if (!isFiniteNumber(rate) || rate < 0 || rate > 100 || Math.round(rate * 10) / 10 !== rate) {
+      throw new ForecastContractError(
+        `${label}.reliability[${index}].sign_hit_rate_percent must be a percentage.`,
+      );
+    }
+    counted += entry.folds;
+  });
+  if (counted !== block.origins) {
+    throw new ForecastContractError(`${label}.reliability must account for every origin.`);
   }
 }
 

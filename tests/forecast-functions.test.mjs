@@ -536,6 +536,13 @@ test("the validation block is optional and travels to the public forecast", () =
     momentum_hit_rate_percent: 32.2,
     sign_folds: 80,
     sign_hit_rate_percent: 50.6,
+    mean_absolute_error_percent: 5.97,
+    naive_mean_absolute_error_percent: 2.15,
+    reliability: [
+      { band: "small", folds: 3, sign_folds: 2, sign_hit_rate_percent: 50 },
+      { band: "medium", folds: 21, sign_folds: 17, sign_hit_rate_percent: 29.4 },
+      { band: "large", folds: 66, sign_folds: 61, sign_hit_rate_percent: 56.7 },
+    ],
   };
 
   const withBlock = artifactFixture();
@@ -568,6 +575,13 @@ test("a hit rate outside 0-100, over-precise, or unscoreable is rejected", () =>
     momentum_hit_rate_percent: 32.2,
     sign_folds: 80,
     sign_hit_rate_percent: 50.6,
+    mean_absolute_error_percent: 5.97,
+    naive_mean_absolute_error_percent: 2.15,
+    reliability: [
+      { band: "small", folds: 3, sign_folds: 2, sign_hit_rate_percent: 50 },
+      { band: "medium", folds: 21, sign_folds: 17, sign_hit_rate_percent: 29.4 },
+      { band: "large", folds: 66, sign_folds: 61, sign_hit_rate_percent: 56.7 },
+    ],
   };
 
   for (const broken of [
@@ -577,6 +591,10 @@ test("a hit rate outside 0-100, over-precise, or unscoreable is rejected", () =>
     { ...base, origins: 0 },
     { ...base, sign_folds: 91 },
     { ...base, surprise: 1 },
+    { ...base, mean_absolute_error_percent: -1 },
+    { ...base, mean_absolute_error_percent: 5.971 },
+    { ...base, reliability: base.reliability.slice(0, 2) },
+    { ...base, reliability: [...base.reliability.slice(0, 2), { ...base.reliability[2], folds: 1 }] },
   ]) {
     const artifact = artifactFixture();
     artifact.assets.btc.summary.validation = broken;

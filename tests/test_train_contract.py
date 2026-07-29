@@ -529,3 +529,61 @@ class DirectionalValidationTests(unittest.TestCase):
         ):
             with self.assertRaises(ArtifactValidationError):
                 _validate_directional_validation(broken, "assets.btc.summary.validation")
+
+
+class MagnitudeAndReliabilityTests(unittest.TestCase):
+    """A direction that is right while the size is worse than doing nothing is
+    worth knowing about, so both are measured next to the same baseline."""
+
+    def _folds(self, pairs):
+        return [
+            ValidationFold(predicted_return=p, actual_return=a, momentum_return=0.0)
+            for p, a in pairs
+        ]
+
+    def test_magnitude_error_is_reported_against_the_random_walk(self) -> None:
+        # Predicting +4 % when it moved +1 %: off by 3 points. The random walk
+        # predicted no change, so its error is the 1 point the price moved.
+        report = directional_validation(self._folds([(0.04, 0.01)]))
+        self.assertEqual(3.0, report["mean_absolute_error_percent"])
+        self.assertEqual(1.0, report["naive_mean_absolute_error_percent"])
+
+    def test_reliability_splits_by_predicted_size_and_covers_every_origin(self) -> None:
+        report = directional_validation(self._folds([
+            (0.001, 0.03),   # small predicted move, actual up  -> signed hit
+            (0.01, 0.03),    # medium, up   -> hit
+            (0.01, -0.03),   # medium, down -> miss
+            (0.05, 0.03),    # large, up    -> hit
+        ]))
+        bands = {band["band"]: band for band in report["reliability"]}
+        self.assertEqual(["small", "medium", "large"], [b["band"] for b in report["reliability"]])
+        self.assertEqual(1, bands["small"]["folds"])
+        self.assertEqual(2, bands["medium"]["folds"])
+        self.assertEqual(1, bands["large"]["folds"])
+        self.assertEqual(50.0, bands["medium"]["sign_hit_rate_percent"])
+        self.assertEqual(100.0, bands["large"]["sign_hit_rate_percent"])
+        # Every fold lands in exactly one band.
+        self.assertEqual(report["origins"], sum(b["folds"] for b in report["reliability"]))
+
+    def test_a_band_with_no_signed_outcome_publishes_null(self) -> None:
+        report = directional_validation(self._folds([(0.05, 0.001)]))
+        large = report["reliability"][2]
+        self.assertEqual(1, large["folds"])
+        self.assertEqual(0, large["sign_folds"])
+        self.assertIsNone(large["sign_hit_rate_percent"])
+
+    def test_contract_rejects_bands_that_do_not_add_up(self) -> None:
+        report = directional_validation(self._folds([(0.01, 0.03)] * 4))
+        _validate_directional_validation(report, "assets.btc.summary.validation")
+
+        for broken in (
+            {**report, "mean_absolute_error_percent": -0.1},
+            {**report, "mean_absolute_error_percent": 1.234},
+            {**report, "reliability": report["reliability"][:2]},
+            {**report, "reliability": [
+                {**report["reliability"][0], "folds": 99},
+                *report["reliability"][1:],
+            ]},
+        ):
+            with self.assertRaises(ArtifactValidationError):
+                _validate_directional_validation(broken, "assets.btc.summary.validation")

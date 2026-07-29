@@ -316,6 +316,8 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
     momentum_hits = 0
     sign_folds = 0
     sign_hits = 0
+    model_error = 0.0
+    naive_error = 0.0
 
     for fold in folds:
         actual = classify_direction(fold.actual_return)
@@ -330,6 +332,11 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
             sign_folds += 1
             if (fold.predicted_return >= 0) == (fold.actual_return >= 0):
                 sign_hits += 1
+        # How far off the size of the move was, in points of return. The random
+        # walk's error is simply how much the price moved, which is the number
+        # any forecast has to beat to have said anything about magnitude.
+        model_error += abs(fold.actual_return - fold.predicted_return)
+        naive_error += abs(fold.actual_return)
 
     def pct(hits: int, of: int) -> float | None:
         return round(100.0 * hits / of, 1) if of else None
@@ -341,7 +348,44 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
         "momentum_hit_rate_percent": pct(momentum_hits, total),
         "sign_folds": sign_folds,
         "sign_hit_rate_percent": pct(sign_hits, sign_folds),
+        "mean_absolute_error_percent": round(100.0 * model_error / total, 2),
+        "naive_mean_absolute_error_percent": round(100.0 * naive_error / total, 2),
+        "reliability": _reliability_bands(folds),
     }
+
+
+# Whether a bigger predicted move is actually more often right. A model whose
+# confident calls are no better than its timid ones is not telling us anything
+# with the size of its forecast, however good its overall hit rate looks.
+RELIABILITY_BANDS = (
+    ("small", 0.0, FLAT_THRESHOLD_RETURN),
+    ("medium", FLAT_THRESHOLD_RETURN, 0.02),
+    ("large", 0.02, float("inf")),
+)
+
+
+def _reliability_bands(folds: Sequence[ValidationFold]) -> list[dict[str, Any]]:
+    bands = []
+    for name, low, high in RELIABILITY_BANDS:
+        selected = [
+            fold for fold in folds if low <= abs(fold.predicted_return) < high
+        ]
+        # Only the signed question is meaningful here: inside the flat band the
+        # policy would call almost everything wrong regardless of the model.
+        signed = [fold for fold in selected if classify_direction(fold.actual_return) != "flat"]
+        hits = sum(
+            1 for fold in signed
+            if (fold.predicted_return >= 0) == (fold.actual_return >= 0)
+        )
+        bands.append({
+            "band": name,
+            "folds": len(selected),
+            "sign_folds": len(signed),
+            "sign_hit_rate_percent": (
+                round(100.0 * hits / len(signed), 1) if signed else None
+            ),
+        })
+    return bands
 
 
 def _format_cdmx(value: datetime) -> str:
@@ -528,9 +572,44 @@ def _validate_directional_validation(value: Any, field: str) -> None:
             "momentum_hit_rate_percent",
             "sign_folds",
             "sign_hit_rate_percent",
+            "mean_absolute_error_percent",
+            "naive_mean_absolute_error_percent",
+            "reliability",
         },
         field,
     )
+    for error in ("mean_absolute_error_percent", "naive_mean_absolute_error_percent"):
+        published = block[error]
+        if not _is_finite_number(published) or float(published) < 0.0:
+            raise ArtifactValidationError(f"{field}.{error} must be a non-negative number")
+        if round(float(published), 2) != float(published):
+            raise ArtifactValidationError(f"{field}.{error} must not exceed two decimals")
+
+    if not isinstance(block["reliability"], list) or len(block["reliability"]) != len(RELIABILITY_BANDS):
+        raise ArtifactValidationError(
+            f"{field}.reliability must list every band exactly once"
+        )
+    expected_bands = [name for name, _, _ in RELIABILITY_BANDS]
+    for index, band in enumerate(block["reliability"]):
+        label = f"{field}.reliability[{index}]"
+        entry = _exact_object(band, {"band", "folds", "sign_folds", "sign_hit_rate_percent"}, label)
+        if entry["band"] != expected_bands[index]:
+            raise ArtifactValidationError(f"{label}.band must be {expected_bands[index]!r}")
+        for count in ("folds", "sign_folds"):
+            if not isinstance(entry[count], int) or isinstance(entry[count], bool) or entry[count] < 0:
+                raise ArtifactValidationError(f"{label}.{count} must be a non-negative integer")
+        if entry["sign_folds"] > entry["folds"]:
+            raise ArtifactValidationError(f"{label}.sign_folds cannot exceed folds")
+        rate = entry["sign_hit_rate_percent"]
+        if rate is None:
+            if entry["sign_folds"] != 0:
+                raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must be a percentage")
+        elif not _is_finite_number(rate) or not 0.0 <= float(rate) <= 100.0:
+            raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must be a percentage")
+        elif round(float(rate), 1) != float(rate):
+            raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must not exceed one decimal")
+    if sum(entry["folds"] for entry in block["reliability"]) != block["origins"]:
+        raise ArtifactValidationError(f"{field}.reliability must account for every origin")
     for count in ("origins", "sign_folds"):
         if not isinstance(block[count], int) or isinstance(block[count], bool) or block[count] < 0:
             raise ArtifactValidationError(f"{field}.{count} must be a non-negative integer")
