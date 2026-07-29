@@ -3,9 +3,17 @@
   publish = "public"
   # A production deploy costs 15 of the 300 monthly credits (docs/06_PRESUPUESTO.md),
   # so pushes that can't change the deployed site must not build. Exit 0 cancels
-  # the build: that happens when the diff touches nothing outside docs/, *.md and
-  # .github/ (CI/workflow files are read by GitHub Actions, never deployed).
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs/' ':(exclude)*.md' ':(exclude).github/'"
+  # the build: that happens when the diff touches nothing outside the excluded
+  # paths. What is deployed is public/ plus netlify/; everything below is read
+  # somewhere else and never shipped:
+  #   docs/, *.md      documentation
+  #   .github/         workflows, read by GitHub Actions
+  #   ml/              the training code, run on GitHub Actions
+  #   tests/           the suites, run in CI
+  #   scripts/publish-*  release tooling invoked by the workflows
+  # A fix to ml/ or tests/ used to cost a full production deploy for a change
+  # that could not alter a single byte of the site.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs/' ':(exclude)*.md' ':(exclude).github/' ':(exclude)ml/' ':(exclude)tests/' ':(exclude)scripts/publish-*'"
 
 [functions]
   directory = "netlify/functions"

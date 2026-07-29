@@ -210,3 +210,26 @@ test("every configured coin is in scope, and off-topic stays out", () => {
     assert.equal(classifyAnalystQuestion(off), ANALYST_INTENTS.OUT_OF_SCOPE, off);
   }
 });
+
+// Templates walked every configured asset, so with eleven coins the advice reply
+// became eleven clauses and the 120-word cap cut it mid-sentence.
+test("templates answer about the coin asked and are never truncated", () => {
+  const context = buildAnalystContext(chatSnapshot());
+
+  const named = templateAnswer("¿me recomiendas comprar bitcoin?", context);
+  assert.match(named, /Bitcoin/);
+  assert.doesNotMatch(named, /Ethereum|Cheems|Solana/, "only the coin asked about");
+  assert.doesNotMatch(named, /…$/, "the reply must fit inside the word cap");
+
+  const cheems = templateAnswer("¿cuánto vale cheems?", context);
+  assert.match(cheems, /Cheems/);
+  assert.doesNotMatch(cheems, /Bitcoin/);
+
+  // No coin named: a couple of them, not the whole board.
+  const unnamed = templateAnswer("¿qué precio tienen?", context);
+  assert.doesNotMatch(unnamed, /…$/);
+  assert.ok(
+    unnamed.split(/\s+/).length < 60,
+    "an unnamed question must not recite every coin",
+  );
+});

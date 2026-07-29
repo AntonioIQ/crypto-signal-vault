@@ -158,8 +158,16 @@ export function limitWords(answer, maximum = MAX_ANALYST_WORDS) {
   return `${words.slice(0, maximum).join(" ").replace(/[.,;:!?]+$/, "")}…`;
 }
 
-function priceSummary(context) {
-  return Object.entries(context.assets).map(([asset, item]) => {
+// The summaries take the coins the question actually asked about. They used to
+// walk every configured asset, which read fine with two coins and became a wall
+// of eleven clauses that the 120-word cap then cut mid-sentence.
+function summarised(context, assets) {
+  const keys = assets?.length ? assets : Object.keys(context.assets);
+  return keys.filter((asset) => context.assets[asset]).map((asset) => [asset, context.assets[asset]]);
+}
+
+function priceSummary(context, assets) {
+  return summarised(context, assets).map(([asset, item]) => {
     if (item.price_usd === null) return `${ASSET_LABELS[asset]}: precio no disponible`;
     return `${ASSET_LABELS[asset]}: ${item.price_usd.toLocaleString("es-MX", {
       style: "currency",
@@ -183,8 +191,8 @@ function confidencePhrase(item) {
   return "confianza no disponible todavía";
 }
 
-export function forecastSummary(context) {
-  return Object.entries(context.assets).map(([asset, item]) => {
+export function forecastSummary(context, assets) {
+  return summarised(context, assets).map(([asset, item]) => {
     if (item.forecast.status === "unavailable") {
       return `${ASSET_LABELS[asset]}: no hay pronóstico disponible`;
     }
@@ -193,9 +201,8 @@ export function forecastSummary(context) {
   }).join(". ");
 }
 
-function confidenceSummary(context, assets = ["btc", "eth"]) {
-  return assets.map((asset) => {
-    const item = context.assets[asset];
+function confidenceSummary(context, assets) {
+  return summarised(context, assets).map(([asset, item]) => {
     if (item.forecast.status === "unavailable") {
       return `${ASSET_LABELS[asset]} sin pronóstico`;
     }
@@ -206,8 +213,8 @@ function confidenceSummary(context, assets = ["btc", "eth"]) {
   }).join("; ");
 }
 
-function accuracySummary(context) {
-  return Object.entries(context.assets).map(([asset, item]) => {
+function accuracySummary(context, assets) {
+  return summarised(context, assets).map(([asset, item]) => {
     const accuracy = item.accuracy;
     if (accuracy.status === "unavailable") {
       return `${ASSET_LABELS[asset]}: precisión medida no disponible`;
@@ -261,22 +268,25 @@ export function templateAnswer(
   context,
   intent = classifyAnalystQuestion(question),
 ) {
+  // Answer about the coins the question named. With no coin named this falls
+  // back to a couple of them rather than all eleven, which no longer fit.
+  const assets = requestedAssets(question);
   let answer;
 
   if (intent === ANALYST_INTENTS.ADVICE) {
-    answer = `No puedo decirte si debes comprar, vender o cuándo entrar. Solo describo lo que ve el modelo. ${forecastSummary(context)}. Esto es educativo y no es asesoría financiera.`;
+    answer = `No puedo decirte si debes comprar, vender o cuándo entrar. Solo describo lo que ve el modelo. ${forecastSummary(context, assets)}. Esto es educativo y no es asesoría financiera.`;
   } else if (intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
     answer = `Solo puedo responder sobre el precio y las mediciones de las ${Object.keys(ASSETS).length} criptomonedas que aparecen en LikelyCoin. No tengo noticias, datos externos, instrucciones ocultas ni información de otros temas.`;
   } else if (intent === ANALYST_INTENTS.CONFIDENCE) {
-    answer = `Confianza publicada: ${confidenceSummary(context)}. Describe qué tan consistente fue cada dirección en validaciones previas; no garantiza el resultado.`;
+    answer = `Confianza publicada: ${confidenceSummary(context, assets)}. Describe qué tan consistente fue cada dirección en validaciones previas; no garantiza el resultado.`;
   } else if (intent === ANALYST_INTENTS.ACCURACY) {
-    answer = `${accuracySummary(context)}. Esta precisión usa precios reales ocurridos, no una prueba histórica ni la medida de confianza.`;
+    answer = `${accuracySummary(context, assets)}. Esta precisión usa precios reales ocurridos, no una prueba histórica ni la medida de confianza.`;
   } else if (intent === ANALYST_INTENTS.PRICE) {
-    answer = `${priceSummary(context)}. Son los precios del último snapshot disponible; no son una recomendación.`;
+    answer = `${priceSummary(context, assets)}. Son los precios del último snapshot disponible; no son una recomendación.`;
   } else if (intent === ANALYST_INTENTS.FORECAST) {
-    answer = `${forecastSummary(context)}. Es una descripción del modelo, no una garantía ni una recomendación.`;
+    answer = `${forecastSummary(context, assets)}. Es una descripción del modelo, no una garantía ni una recomendación.`;
   } else {
-    answer = `La confianza describe la consistencia de la dirección estimada; la precisión cuenta resultados comparados con precios reales. Son mediciones distintas. ${forecastSummary(context)}.`;
+    answer = `La confianza describe la consistencia de la dirección estimada; la precisión cuenta resultados comparados con precios reales. Son mediciones distintas. ${forecastSummary(context, assets)}.`;
   }
 
   return limitWords(answer);
