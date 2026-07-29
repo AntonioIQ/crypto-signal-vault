@@ -21,6 +21,10 @@ from ml.train import (
     confidence_from_residuals,
     main,
     rolling_origin_residuals,
+    _validate_directional_validation,
+    rolling_origin_folds,
+    directional_validation,
+    ValidationFold,
     validate_artifact,
 )
 
@@ -462,3 +466,66 @@ class ArtifactContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DirectionalValidationTests(unittest.TestCase):
+    """A hit rate on its own says nothing; it ships with what it must beat."""
+
+    def _folds(self, pairs):
+        return [
+            ValidationFold(predicted_return=p, actual_return=a, momentum_return=m)
+            for p, a, m in pairs
+        ]
+
+    def test_reports_the_model_next_to_two_free_baselines(self) -> None:
+        # predicted, actual, momentum
+        folds = self._folds([
+            (0.02, 0.03, 0.02),    # model up, actual up   -> hit; momentum hit
+            (-0.02, -0.03, 0.02),  # model down, actual down-> hit; momentum miss
+            (0.02, -0.03, -0.02),  # model up, actual down  -> miss; momentum hit
+            (0.0, 0.0, 0.0),       # everything flat        -> hit; naive hit
+        ])
+        report = directional_validation(folds)
+
+        self.assertEqual(4, report["origins"])
+        self.assertEqual(75.0, report["hit_rate_percent"])
+        # A random walk says "flat", right on exactly the one flat outcome.
+        self.assertEqual(25.0, report["naive_hit_rate_percent"])
+        self.assertEqual(75.0, report["momentum_hit_rate_percent"])
+        # The signed view drops the flat fold and asks only up versus down.
+        self.assertEqual(3, report["sign_folds"])
+        self.assertEqual(66.7, report["sign_hit_rate_percent"])
+
+    def test_signed_rate_is_null_when_every_outcome_was_flat(self) -> None:
+        report = directional_validation(self._folds([(0.0, 0.001, 0.0)]))
+        self.assertEqual(0, report["sign_folds"])
+        self.assertIsNone(report["sign_hit_rate_percent"])
+        self.assertEqual(100.0, report["naive_hit_rate_percent"])
+
+    def test_no_folds_publishes_nothing_rather_than_zero(self) -> None:
+        self.assertIsNone(directional_validation([]))
+
+    def test_folds_carry_both_sides_and_still_yield_the_residuals(self) -> None:
+        history = points(400)
+        folds = rolling_origin_folds(
+            history, linear_factory([]), min_train_points=168, max_origins=5,
+        )
+        residuals = rolling_origin_residuals(
+            history, linear_factory([]), min_train_points=168, max_origins=5,
+        )
+        self.assertEqual(len(folds), len(residuals))
+        for fold, residual in zip(folds, residuals):
+            self.assertAlmostEqual(fold.actual_return - fold.predicted_return, residual)
+
+    def test_the_published_block_survives_contract_validation(self) -> None:
+        report = directional_validation(self._folds([(0.02, 0.03, 0.02)] * 3))
+        _validate_directional_validation(report, "assets.btc.summary.validation")
+
+        for broken in (
+            {**report, "hit_rate_percent": 100.05},
+            {**report, "hit_rate_percent": None},
+            {**report, "origins": 0},
+            {**report, "sign_folds": report["origins"] + 1},
+        ):
+            with self.assertRaises(ArtifactValidationError):
+                _validate_directional_validation(broken, "assets.btc.summary.validation")

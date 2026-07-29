@@ -7,6 +7,7 @@ import {
   PREVIOUS_FORECAST_KEY,
   anchorForecast,
   assertValidForecastArtifact,
+  assertValidPublicForecast,
   forecastArtifactStatus,
   readUsableForecastArtifact,
 } from "../netlify/lib/forecast-contract.mjs";
@@ -522,4 +523,76 @@ test("confidence accepts an optional scenarios distribution and rejects a wrong 
   const bad = artifactFixture();
   bad.assets.btc.summary.confidence.scenarios = Array.from({ length: 40 }, (_, i) => (i === 0 ? Number.NaN : 0.01));
   assert.throws(() => assertValidForecastArtifact(bad));
+});
+
+// The measured hit rates ride along with the forecast so the page can say
+// whether the model beat doing nothing. Optional and additive: artifacts
+// published before it existed stay valid.
+test("the validation block is optional and travels to the public forecast", () => {
+  const good = {
+    origins: 90,
+    hit_rate_percent: 44.4,
+    naive_hit_rate_percent: 10.9,
+    momentum_hit_rate_percent: 32.2,
+    sign_folds: 80,
+    sign_hit_rate_percent: 50.6,
+  };
+
+  const withBlock = artifactFixture();
+  for (const asset of Object.keys(withBlock.assets)) {
+    withBlock.assets[asset].summary.validation = { ...good };
+  }
+  assert.doesNotThrow(() => assertValidForecastArtifact(withBlock));
+
+  // Absent is still valid.
+  const without = artifactFixture();
+  assert.doesNotThrow(() => assertValidForecastArtifact(without));
+
+  // And it reaches /api/latest, where the page reads it.
+  const snapshot = createFreshSnapshot(SAMPLE_PRICES, new Date("2026-07-17T02:15:00-06:00"));
+  const forecast = anchorForecast(
+    withBlock,
+    forecastArtifactStatus(withBlock, new Date("2026-07-17T02:15:00-06:00")),
+    snapshot,
+    formatMexicoCityTimestamp,
+  );
+  assert.deepEqual(forecast.assets.btc.validation, good);
+  assert.doesNotThrow(() => assertValidPublicForecast(forecast));
+});
+
+test("a hit rate outside 0-100, over-precise, or unscoreable is rejected", () => {
+  const base = {
+    origins: 90,
+    hit_rate_percent: 44.4,
+    naive_hit_rate_percent: 10.9,
+    momentum_hit_rate_percent: 32.2,
+    sign_folds: 80,
+    sign_hit_rate_percent: 50.6,
+  };
+
+  for (const broken of [
+    { ...base, hit_rate_percent: 100.5 },
+    { ...base, hit_rate_percent: 44.44 },
+    { ...base, hit_rate_percent: null },
+    { ...base, origins: 0 },
+    { ...base, sign_folds: 91 },
+    { ...base, surprise: 1 },
+  ]) {
+    const artifact = artifactFixture();
+    artifact.assets.btc.summary.validation = broken;
+    assert.throws(
+      () => assertValidForecastArtifact(artifact),
+      /validation/,
+      `should reject ${JSON.stringify(broken)}`,
+    );
+  }
+
+  // Null is allowed for the signed rate only when nothing was scored.
+  const artifact = artifactFixture();
+  artifact.assets.btc.summary.validation = {
+    ...base,
+    sign_folds: 0,
+    sign_hit_rate_percent: null,
+  };
+  assert.doesNotThrow(() => assertValidForecastArtifact(artifact));
 });

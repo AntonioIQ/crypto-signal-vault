@@ -170,6 +170,56 @@ function validateConfidence(value, label) {
   return confidence;
 }
 
+// The measured hit rates: how often the published direction was right, next to
+// the two baselines it has to beat to be worth anything.
+function validateDirectionalValidation(value, label) {
+  const block = requireExactObject(
+    value,
+    [
+      "origins",
+      "hit_rate_percent",
+      "naive_hit_rate_percent",
+      "momentum_hit_rate_percent",
+      "sign_folds",
+      "sign_hit_rate_percent",
+    ],
+    label,
+  );
+
+  if (!Number.isInteger(block.origins) || block.origins < 1) {
+    throw new ForecastContractError(`${label}.origins must be a positive integer.`);
+  }
+  if (
+    !Number.isInteger(block.sign_folds) ||
+    block.sign_folds < 0 ||
+    block.sign_folds > block.origins
+  ) {
+    throw new ForecastContractError(`${label}.sign_folds must fit inside origins.`);
+  }
+
+  for (const key of [
+    "hit_rate_percent",
+    "naive_hit_rate_percent",
+    "momentum_hit_rate_percent",
+    "sign_hit_rate_percent",
+  ]) {
+    const rate = block[key];
+    // Only the signed rate may be null, and only when nothing was scored.
+    if (rate === null) {
+      if (key !== "sign_hit_rate_percent" || block.sign_folds !== 0) {
+        throw new ForecastContractError(`${label}.${key} must be a percentage.`);
+      }
+      continue;
+    }
+    if (!isFiniteNumber(rate) || rate < 0 || rate > 100) {
+      throw new ForecastContractError(`${label}.${key} must be a percentage.`);
+    }
+    if (Math.round(rate * 10) / 10 !== rate) {
+      throw new ForecastContractError(`${label}.${key} must not exceed one decimal.`);
+    }
+  }
+}
+
 function validateArtifactAsset(value, asset, generatedAt) {
   const item = requireExactObject(
     value,
@@ -227,9 +277,14 @@ function validateArtifactAsset(value, asset, generatedAt) {
     }
   });
 
+  // validation is optional and additive: artifacts published before the
+  // measured hit rates existed stay valid.
+  const summaryFields = ["terminal_return", "direction", "confidence"];
   const summary = requireExactObject(
     item.summary,
-    ["terminal_return", "direction", "confidence"],
+    isRecord(item.summary) && Object.hasOwn(item.summary, "validation")
+      ? [...summaryFields, "validation"]
+      : summaryFields,
     `assets.${asset}.summary`,
   );
   const expectedTerminal = item.forecast[47].return_factor - 1;
@@ -241,6 +296,12 @@ function validateArtifactAsset(value, asset, generatedAt) {
     throw new ForecastContractError(`assets.${asset}.summary is inconsistent.`);
   }
   validateConfidence(summary.confidence, `assets.${asset}.summary.confidence`);
+  if (Object.hasOwn(summary, "validation")) {
+    validateDirectionalValidation(
+      summary.validation,
+      `assets.${asset}.summary.validation`,
+    );
+  }
 
   return observedAt;
 }
@@ -407,11 +468,17 @@ export function unavailableForecast() {
 }
 
 function validatePublicForecastAsset(value, asset, anchoredAt) {
+  const publicFields = ["direction", "terminal_return", "confidence", "points"];
   const item = requireExactObject(
     value,
-    ["direction", "terminal_return", "confidence", "points"],
+    isRecord(value) && Object.hasOwn(value, "validation")
+      ? [...publicFields, "validation"]
+      : publicFields,
     `forecast.assets.${asset}`,
   );
+  if (Object.hasOwn(item, "validation")) {
+    validateDirectionalValidation(item.validation, `forecast.assets.${asset}.validation`);
+  }
   if (
     !["up", "down", "flat"].includes(item.direction) ||
     !isFiniteNumber(item.terminal_return) ||
@@ -539,6 +606,12 @@ export function anchorForecast(artifact, status, marketSnapshot, formatTimestamp
             direction: modelAsset.summary.direction,
             terminal_return: modelAsset.summary.terminal_return,
             confidence: clone(modelAsset.summary.confidence),
+            // Carried through so the page can say whether the model beat doing
+            // nothing, which is the only thing that makes a hit rate mean
+            // something. Absent on artifacts published before it existed.
+            ...(Object.hasOwn(modelAsset.summary, "validation")
+              ? { validation: clone(modelAsset.summary.validation) }
+              : {}),
             points: modelAsset.forecast.map((point) => ({
               offset_hours: point.offset_hours,
               target_at: formatTimestamp(

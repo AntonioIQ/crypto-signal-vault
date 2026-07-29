@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import json
 import math
@@ -204,15 +205,32 @@ def forecast_prices(
     return _validated_predictions(forecaster.predict(steps), steps, "forecaster")
 
 
-def rolling_origin_residuals(
+@dataclass(frozen=True)
+class ValidationFold:
+    """One out-of-sample test: what the model said, and what actually happened."""
+
+    predicted_return: float
+    actual_return: float
+    # The direction a random walk would have implied at this origin: none. Kept
+    # per fold so a baseline costs no extra model fit.
+    momentum_return: float
+
+
+def rolling_origin_folds(
     history: Sequence[PricePoint],
     forecaster_factory: ForecasterFactory,
     *,
     horizon_hours: int = HORIZON_HOURS,
     min_train_points: int = DEFAULT_MIN_TRAIN_POINTS,
     max_origins: int = DEFAULT_VALIDATION_ORIGINS,
-) -> list[float]:
-    """Calculate 48h residuals with a fresh model and past-only data per fold."""
+) -> list[ValidationFold]:
+    """Run the rolling-origin protocol, keeping both sides of every fold.
+
+    The residual a fold contributes to the confidence is
+    ``actual_return - predicted_return``; keeping the two terms lets the same
+    single pass also measure how often the direction was right, and what a
+    baseline would have scored on exactly the same folds.
+    """
 
     if horizon_hours != HORIZON_HOURS:
         raise TrainingError(f"rolling-origin horizon must be {HORIZON_HOURS} hours")
@@ -239,7 +257,7 @@ def rolling_origin_residuals(
         step = (span - 1) / (count - 1)
         origins = sorted({first_origin + round(index * step) for index in range(count)})
 
-    residuals: list[float] = []
+    folds: list[ValidationFold] = []
     for origin in origins:
         training_fold = tuple(history[: origin + 1])
         predicted_path = forecast_prices(
@@ -250,8 +268,80 @@ def rolling_origin_residuals(
         reference = training_fold[-1].price
         predicted_return = predicted_path[-1] / reference - 1.0
         actual_return = history[origin + horizon_hours].price / reference - 1.0
-        residuals.append(actual_return - predicted_return)
-    return residuals
+        # "Whatever it just did, it keeps doing": the previous 48h move, read
+        # only from data the fold was allowed to see.
+        previous = training_fold[-horizon_hours - 1].price if len(training_fold) > horizon_hours else reference
+        momentum_return = reference / previous - 1.0 if previous > 0 else 0.0
+        folds.append(
+            ValidationFold(
+                predicted_return=predicted_return,
+                actual_return=actual_return,
+                momentum_return=momentum_return,
+            )
+        )
+    return folds
+
+
+def rolling_origin_residuals(
+    history: Sequence[PricePoint],
+    forecaster_factory: ForecasterFactory,
+    **kwargs: Any,
+) -> list[float]:
+    """Calculate 48h residuals with a fresh model and past-only data per fold."""
+
+    return [
+        fold.actual_return - fold.predicted_return
+        for fold in rolling_origin_folds(history, forecaster_factory, **kwargs)
+    ]
+
+
+def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | None:
+    """How often the published direction was right, next to two free baselines.
+
+    Reported because a hit rate on its own says nothing: under the three-class
+    policy a random walk always says "flat", and at a 48h horizon the outcome
+    almost never is, so the number needs something to be compared against.
+
+    ``sign_*`` drops the folds whose real outcome was flat and asks only whether
+    up-versus-down was right. That is the coin-flip comparison, and the policy's
+    tau makes the three-class figure look worse than the model deserves.
+    """
+
+    if not folds:
+        return None
+
+    total = len(folds)
+    model_hits = 0
+    naive_hits = 0
+    momentum_hits = 0
+    sign_folds = 0
+    sign_hits = 0
+
+    for fold in folds:
+        actual = classify_direction(fold.actual_return)
+        if classify_direction(fold.predicted_return) == actual:
+            model_hits += 1
+        # A random walk predicts no change, which this policy calls "flat".
+        if actual == "flat":
+            naive_hits += 1
+        if classify_direction(fold.momentum_return) == actual:
+            momentum_hits += 1
+        if actual != "flat":
+            sign_folds += 1
+            if (fold.predicted_return >= 0) == (fold.actual_return >= 0):
+                sign_hits += 1
+
+    def pct(hits: int, of: int) -> float | None:
+        return round(100.0 * hits / of, 1) if of else None
+
+    return {
+        "origins": total,
+        "hit_rate_percent": pct(model_hits, total),
+        "naive_hit_rate_percent": pct(naive_hits, total),
+        "momentum_hit_rate_percent": pct(momentum_hits, total),
+        "sign_folds": sign_folds,
+        "sign_hit_rate_percent": pct(sign_hits, sign_folds),
+    }
 
 
 def _format_cdmx(value: datetime) -> str:
@@ -284,12 +374,14 @@ def _build_asset_forecast(
     reference_price = history[-1].price
     factors = [price / reference_price for price in predicted_prices]
     emitted_terminal_return = factors[-1] - 1.0
-    residuals = rolling_origin_residuals(
+    folds = rolling_origin_folds(
         history,
         forecaster_factory,
         min_train_points=DEFAULT_MIN_TRAIN_POINTS,
         max_origins=validation_origins,
     )
+    residuals = [fold.actual_return - fold.predicted_return for fold in folds]
+    validation = directional_validation(folds)
     metadata = SUPPORTED_ASSETS[asset]
     return {
         "id": metadata["coin_id"],
@@ -306,6 +398,7 @@ def _build_asset_forecast(
             "terminal_return": emitted_terminal_return,
             "direction": classify_direction(emitted_terminal_return),
             "confidence": confidence_from_residuals(emitted_terminal_return, residuals),
+            **({"validation": validation} if validation is not None else {}),
         },
     }
 
@@ -423,6 +516,47 @@ def _is_finite_number(value: Any) -> bool:
     )
 
 
+def _validate_directional_validation(value: Any, field: str) -> None:
+    """The measured hit rates, which must stay whole percentages of real folds."""
+
+    block = _exact_object(
+        value,
+        {
+            "origins",
+            "hit_rate_percent",
+            "naive_hit_rate_percent",
+            "momentum_hit_rate_percent",
+            "sign_folds",
+            "sign_hit_rate_percent",
+        },
+        field,
+    )
+    for count in ("origins", "sign_folds"):
+        if not isinstance(block[count], int) or isinstance(block[count], bool) or block[count] < 0:
+            raise ArtifactValidationError(f"{field}.{count} must be a non-negative integer")
+    if block["origins"] < 1:
+        raise ArtifactValidationError(f"{field}.origins must be positive")
+    if block["sign_folds"] > block["origins"]:
+        raise ArtifactValidationError(f"{field}.sign_folds cannot exceed origins")
+    for rate in (
+        "hit_rate_percent",
+        "naive_hit_rate_percent",
+        "momentum_hit_rate_percent",
+        "sign_hit_rate_percent",
+    ):
+        published = block[rate]
+        # sign_hit_rate_percent is null exactly when no fold had a signed
+        # outcome to score, which is the honest answer rather than a zero.
+        if published is None:
+            if rate != "sign_hit_rate_percent" or block["sign_folds"] != 0:
+                raise ArtifactValidationError(f"{field}.{rate} must be a number")
+            continue
+        if not _is_finite_number(published) or not 0.0 <= float(published) <= 100.0:
+            raise ArtifactValidationError(f"{field}.{rate} must be a percentage")
+        if round(float(published), 1) != float(published):
+            raise ArtifactValidationError(f"{field}.{rate} must not exceed one decimal")
+
+
 def _exact_object(value: Any, expected: set[str], field: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ArtifactValidationError(f"{field} must be an object")
@@ -530,7 +664,12 @@ def _validate_asset(asset: str, value: Any, generated_at: datetime) -> datetime:
                 f"assets.{asset}.forecast[{index - 1}].return_factor must be finite and positive"
             )
 
-    summary = _exact_object(item["summary"], {"terminal_return", "direction", "confidence"}, f"assets.{asset}.summary")
+    summary_fields = {"terminal_return", "direction", "confidence"}
+    if isinstance(item["summary"], Mapping) and "validation" in item["summary"]:
+        summary_fields = summary_fields | {"validation"}
+    summary = _exact_object(item["summary"], summary_fields, f"assets.{asset}.summary")
+    if "validation" in summary:
+        _validate_directional_validation(summary["validation"], f"assets.{asset}.summary.validation")
     expected_terminal = float(forecast[-1]["return_factor"]) - 1.0
     if not _is_finite_number(summary["terminal_return"]) or not math.isclose(
         float(summary["terminal_return"]),
