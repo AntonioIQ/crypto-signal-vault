@@ -225,8 +225,12 @@ function answerHasRequiredConfidence(answer, context, assets) {
     if (forecast.confidence.status !== "available") {
       return /confianza.{0,40}(?:no disponible|sin porcentaje|insuficiente)/.test(plain);
     }
+    // "50 %" and "50 por ciento" are the same statement. Only matching the
+    // symbol made the canonical summary get appended to answers that had
+    // already said it in words, which put a data dump back on the end of an
+    // otherwise conversational reply.
     const value = String(forecast.confidence.percent).replace(".", "[.,]");
-    return new RegExp(`(?:^|[^0-9])${value}\\s*%`).test(plain);
+    return new RegExp(`(?:^|[^0-9])${value}\\s*(?:%|por\\s?ciento)`).test(plain);
   });
 }
 

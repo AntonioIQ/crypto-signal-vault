@@ -336,3 +336,21 @@ test("a forecast answer still has to carry its published confidence", async () =
   assert.match(forecast.answer, /1\.8 %/);
   assert.match(forecast.answer, /72\.5 %/, "the confidence is appended when the answer omits it");
 });
+
+test("a confidence stated in words is not repeated as an appended summary", async () => {
+  const handler = enabledHandler({
+    completeFn: async () =>
+      "Bitcoin apunta a una subida de 1.8 % en 48 horas, con 72.5 por ciento de confianza.",
+  });
+  const forecast = await (await handler(chatRequest({
+    question: "¿Qué pronóstico hay para Bitcoin?",
+    sessionId: SESSION_ID,
+  }))).json();
+
+  assert.doesNotMatch(
+    forecast.answer,
+    /Confianza publicada/,
+    "the answer already said it; appending the canonical summary re-adds a data dump",
+  );
+  assert.match(forecast.answer, /72\.5 por ciento/);
+});
