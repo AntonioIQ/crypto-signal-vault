@@ -37,6 +37,14 @@ const els = {
   signalAccuracy: document.getElementById('signal-accuracy'),
   signalStatus: document.getElementById('signal-status'),
   forecastRows: document.getElementById('forecast-rows'),
+  signalMagnitude: document.getElementById('signal-magnitude'),
+  honestySection: document.getElementById('honesty-section'),
+  honestyAsset: document.getElementById('honesty-asset'),
+  honestyDirection: document.getElementById('honesty-direction'),
+  honestyBreakeven: document.getElementById('honesty-breakeven'),
+  honestyMagnitude: document.getElementById('honesty-magnitude'),
+  honestyCalibration: document.getElementById('honesty-calibration'),
+  honestyCalibrationNote: document.getElementById('honesty-calibration-note'),
   ticker: document.getElementById('ticker'),
   spark: document.getElementById('spark'),
   scenarioAsset: document.getElementById('scenario-asset'),
@@ -330,6 +338,116 @@ function renderForecastTable() {
   }
 }
 
+// A round trip on a retail exchange, used only to state the accuracy a signal
+// would need before it covered its own costs.
+const ROUND_TRIP_FEE_PERCENT = 0.2;
+
+function honestyRow(label, value, { tone = '', hint = '' } = {}) {
+  return `<div class="honesty-row"${hint ? ` title="${hint}"` : ''}>` +
+    `<span>${label}</span><strong class="${tone}">${value}</strong></div>`;
+}
+
+function pctLabel(value, digits = 1) {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? `${value.toFixed(digits)} %`
+    : 'sin medir';
+}
+
+// Everything here is measured on the model's own validation window. It is shown
+// whether or not it flatters us: a hit rate with nothing to compare it against
+// says nothing, and a magnitude that loses to "no change" should be admitted.
+function renderHonesty() {
+  const item = state.snapshot?.forecast?.assets?.[state.asset];
+  const validation = item?.validation;
+  if (!els.honestySection) return;
+  if (!validation) {
+    els.honestySection.hidden = true;
+    return;
+  }
+  els.honestySection.hidden = false;
+  els.honestyAsset.textContent =
+    state.snapshot?.assets?.[state.asset]?.symbol ?? state.asset.toUpperCase();
+
+  const model = validation.sign_hit_rate_percent;
+  const naive = validation.naive_hit_rate_percent;
+  const momentum = validation.momentum_hit_rate_percent;
+  const beatsNothing = typeof model === 'number' && model > 50;
+
+  els.honestyDirection.innerHTML = [
+    honestyRow(
+      'Nuestro modelo, subida o bajada',
+      pctLabel(model),
+      { tone: beatsNothing ? 'up' : 'down',
+        hint: `Sobre ${validation.sign_folds} pruebas fuera de muestra.` },
+    ),
+    honestyRow('Una moneda al aire', '50.0 %'),
+    honestyRow('Seguir la tendencia reciente', pctLabel(momentum),
+      { hint: 'Predecir que el precio hará lo mismo que hizo las 48 h anteriores.' }),
+    honestyRow('No predecir nada', pctLabel(naive),
+      { hint: 'Decir siempre que el precio se mantendrá estable.' }),
+  ].join('');
+
+  // The move a trade would have to cover before it earned anything, derived from
+  // how much the price actually moves: the naive error IS the average move.
+  const averageMove = validation.naive_mean_absolute_error_percent;
+  if (typeof averageMove === 'number' && averageMove > 0) {
+    const breakeven = 50 + (ROUND_TRIP_FEE_PERCENT / (2 * averageMove)) * 100;
+    els.honestyBreakeven.textContent =
+      `A 48 h el precio se mueve ${averageMove.toFixed(2)} % en promedio, así que operar esta señal `
+      + `necesitaría acertar ${breakeven.toFixed(1)} % solo para cubrir comisiones `
+      + `(${ROUND_TRIP_FEE_PERCENT} % ida y vuelta). No es una recomendación para operar.`;
+  } else {
+    els.honestyBreakeven.textContent = '';
+  }
+
+  const magnitude = item?.magnitude;
+  const theirs = validation.naive_mean_absolute_error_percent;
+  // What we actually publish is the corrected estimate, so that is the error to
+  // compare — with the uncorrected one shown underneath rather than buried.
+  const ours = magnitude?.mean_absolute_error_percent ?? validation.mean_absolute_error_percent;
+  const better = typeof ours === 'number' && typeof theirs === 'number' && ours <= theirs;
+  els.honestyMagnitude.innerHTML = [
+    honestyRow('Error de lo que publicamos', pctLabel(ours, 2),
+      { tone: better ? 'up' : 'down',
+        hint: 'Cuántos puntos porcentuales nos separan del movimiento real, en promedio.' }),
+    honestyRow('Error de decir “no cambia”', pctLabel(theirs, 2),
+      { hint: 'El listón a superar: es cuánto se mueve el precio, sin más.' }),
+    magnitude
+      ? honestyRow(
+        'Sin nuestra corrección habría sido',
+        pctLabel(magnitude.raw_mean_absolute_error_percent, 2),
+        { tone: 'down',
+          hint: `Encogemos el tamaño ×${magnitude.shrinkage} hacia “no cambia” porque así erramos menos. La dirección no se toca.` },
+      )
+      : '',
+  ].join('');
+
+  const bands = validation.calibration ?? [];
+  const scored = bands.filter((band) => band.sign_hit_rate_percent !== null);
+  if (!scored.length) {
+    els.honestyCalibration.innerHTML =
+      '<p class="honesty-empty">Aún no hay suficientes pruebas para responderlo.</p>';
+    els.honestyCalibrationNote.textContent = '';
+    return;
+  }
+  els.honestyCalibration.innerHTML = scored.map((band) => honestyRow(
+    `Cuando dijimos ${band.band} %`,
+    pctLabel(band.sign_hit_rate_percent),
+    { hint: `${band.sign_folds} pruebas en esta banda.` },
+  )).join('');
+
+  // If the top band is not the best one, the number does not predict accuracy —
+  // which is the finding, and hiding it would be the dishonest choice.
+  const top = scored.at(-1);
+  const best = scored.reduce(
+    (a, b) => (b.sign_hit_rate_percent > a.sign_hit_rate_percent ? b : a),
+  );
+  els.honestyCalibrationNote.textContent = top === best
+    ? 'Nuestra consistencia más alta sí acertó más seguido, así que por ahora la medida se sostiene.'
+    : 'Nuestras lecturas más “consistentes” no acertaron más: esa medida todavía no demuestra '
+      + 'predecir el acierto, y por eso no la llamamos probabilidad.';
+}
+
 function renderPrediction() {
   const view = forecastView(state.snapshot, state.asset);
   const row = forecastRowData(state.asset);
@@ -348,7 +466,9 @@ function renderPrediction() {
     els.signalPanel.classList.add('unavailable');
     els.trained.textContent = 'Sin publicación';
     els.trainedStatus.textContent = 'PRONÓSTICO PENDIENTE';
+    if (els.signalMagnitude) els.signalMagnitude.textContent = '—';
     renderForecastTable();
+    renderHonesty();
     return;
   }
 
@@ -365,12 +485,24 @@ function renderPrediction() {
   els.signalPanel.classList.add(view.tone);
   if (view.status === 'stale') els.signalPanel.classList.add('stale');
 
+  // The shrunk estimate is the honest one, and it never appears without the
+  // error it carries: on its own the number reads as precise, and it is not.
+  const magnitude = state.snapshot?.forecast?.assets?.[state.asset]?.magnitude;
+  if (els.signalMagnitude) {
+    els.signalMagnitude.textContent = magnitude
+      ? `${magnitude.point_estimate_return >= 0 ? '+' : '−'}`
+        + `${Math.abs(magnitude.point_estimate_return * 100).toFixed(2)} % `
+        + `± ${magnitude.mean_absolute_error_percent} pts`
+      : `${Math.abs(view.terminalReturn * 100).toFixed(1)} % (sin medición de error)`;
+  }
+
   const trainedAt = artifactGeneratedAt(view.artifactVersion);
   els.trained.textContent = trainedAt
     ? `${timeFmt.format(trainedAt)} (CDMX)`
     : 'Publicación validada';
   els.trainedStatus.textContent = view.status === 'fresh' ? 'MODELO AL DÍA' : 'MODELO POR ACTUALIZAR';
   renderForecastTable();
+  renderHonesty();
 }
 
 // Tabs are built from the assets the snapshot actually carries, so adding a

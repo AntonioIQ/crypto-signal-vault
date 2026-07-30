@@ -105,11 +105,16 @@
           </div>
           <div>
             <div class="signal-row">
-              <span>Confianza de esta señal</span>
+              <span title="Qué tan consistente fue esta dirección al probar el modelo con datos pasados. No es la probabilidad de acertar.">Consistencia de la dirección</span>
               <strong id="signal-confidence">—</strong>
             </div>
             <div class="signal-bar"><div id="signal-bar-fill" class="signal-bar-fill"></div></div>
             <p id="signal-scenarios" class="signal-scenarios"></p>
+          </div>
+
+          <div class="signal-row">
+            <span>Tamaño estimado del movimiento</span>
+            <strong id="signal-magnitude">—</strong>
           </div>
           <div class="signal-row signal-row-divider">
             <span>Precisión medida (7 d)</span>
@@ -137,6 +142,36 @@
           </div>
         </div>
         <div id="scenario-mount"></div>
+      </section>
+
+      <section id="honesty-section" class="honesty-card panel" aria-labelledby="honesty-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="section-label analyst-label">LO QUE MEDIMOS DE NOSOTROS MISMOS</p>
+            <h2 id="honesty-title">¿Este pronóstico sirve de algo?</h2>
+            <p class="honesty-lead">Cada número de abajo es una medición sobre <span id="honesty-asset" class="accent-word">BTC</span>, no una promesa. Los publicamos aunque no nos favorezcan.</p>
+          </div>
+        </div>
+
+        <div class="honesty-grid">
+          <article class="honesty-block">
+            <h3>Acertar la dirección</h3>
+            <div id="honesty-direction" class="honesty-rows"></div>
+            <p class="honesty-note" id="honesty-breakeven"></p>
+          </article>
+
+          <article class="honesty-block">
+            <h3>Acertar el tamaño</h3>
+            <div id="honesty-magnitude" class="honesty-rows"></div>
+            <p class="honesty-note">Estimar cuánto se moverá el precio a 48 h es más difícil que estimar hacia dónde. Cuando nuestro error supera al de “no cambia”, lo decimos.</p>
+          </article>
+
+          <article class="honesty-block honesty-block-wide">
+            <h3>¿La consistencia predice el acierto?</h3>
+            <div id="honesty-calibration" class="honesty-rows"></div>
+            <p class="honesty-note" id="honesty-calibration-note"></p>
+          </article>
+        </div>
       </section>
 
       <section id="analyst-section" class="analyst-section panel" aria-labelledby="analyst-title" hidden>

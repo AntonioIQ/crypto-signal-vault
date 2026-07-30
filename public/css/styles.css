@@ -1637,6 +1637,109 @@ a {
   display: block;
 }
 
+/* What we measure about ourselves. Amber, like the analyst: this is the section
+   that talks about what has already been measured rather than predicted. */
+.honesty-card {
+  margin-top: 26px;
+  padding: 30px 32px;
+  border-color: rgba(241, 197, 106, 0.24);
+}
+
+.honesty-card[hidden] {
+  display: none;
+}
+
+.honesty-card h2 {
+  margin: 8px 0 0;
+  font-size: clamp(1.5rem, 2.4vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.honesty-lead {
+  max-width: 62ch;
+  margin: 10px 0 0;
+  color: var(--muted-strong);
+  font-size: 0.92rem;
+}
+
+.honesty-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 24px;
+}
+
+.honesty-block {
+  padding: 20px 22px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.honesty-block-wide {
+  grid-column: 1 / -1;
+}
+
+.honesty-block h3 {
+  margin: 0 0 14px;
+  color: var(--analyst-soft);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.honesty-rows {
+  display: grid;
+  gap: 2px;
+}
+
+.honesty-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(199, 232, 219, 0.06);
+}
+
+.honesty-row:last-child {
+  border-bottom: 0;
+}
+
+.honesty-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.honesty-row strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.honesty-row strong.up {
+  color: var(--up);
+}
+
+.honesty-row strong.down {
+  color: var(--down);
+}
+
+.honesty-note {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.honesty-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 /* Scenario legend: the three classes the Galton board can produce. */
 .scenario-legend {
   display: flex;
@@ -1699,6 +1802,10 @@ a {
   }
 
   .forecast-section {
+    grid-template-columns: 1fr;
+  }
+
+  .honesty-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1777,8 +1884,13 @@ a {
   }
 
   .forecast-table-card,
-  .signal-panel {
+  .signal-panel,
+  .honesty-card {
     padding: 22px 18px;
+  }
+
+  .honesty-block {
+    padding: 16px 14px;
   }
 
   /* Drop the long name: symbol, direction, % and confidence still fit. */
