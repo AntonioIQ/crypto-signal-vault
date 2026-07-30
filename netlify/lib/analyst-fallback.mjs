@@ -53,7 +53,7 @@ const ASSET_TERMS = Object.entries(ASSETS)
 
 const MENTIONS_ASSET = new RegExp(`\\b(?:${ASSET_TERMS.join("|")})\\b`);
 
-export function classifyAnalystQuestion(question) {
+export function classifyAnalystQuestion(question, focus = undefined) {
   const text = normalized(question);
   if (isAdviceQuestion(question)) return ANALYST_INTENTS.ADVICE;
   if (/\b(confianza|segura|seguro|certeza)\b/.test(text)) return ANALYST_INTENTS.CONFIDENCE;
@@ -71,6 +71,13 @@ export function classifyAnalystQuestion(question) {
     MENTIONS_ASSET.test(text) ||
     /\b(modelo|datos|snapshot|lectura|confianza|precision|prediccion|pronostico|cripto|criptomoneda|moneda|mercado)\b/.test(text)
   ) {
+    return ANALYST_INTENTS.EXPLANATION;
+  }
+  // A bare follow-up ("¿y por qué?", "¿cómo va?") names nothing at all. With a
+  // coin on screen it is plainly about that coin, so it is in scope — the prompt
+  // attack and off-topic patterns above have already had their say, so this
+  // cannot let an injection through.
+  if (typeof focus === "string" && Object.hasOwn(ASSETS, focus)) {
     return ANALYST_INTENTS.EXPLANATION;
   }
   return ANALYST_INTENTS.OUT_OF_SCOPE;
@@ -226,7 +233,10 @@ function accuracySummary(context, assets) {
   }).join(". ");
 }
 
-function requestedAssets(text) {
+// The coin the page is showing, used when the question names none. Without it a
+// follow-up like "¿y por qué?" answered about bitcoin whatever the reader had
+// open.
+function requestedAssets(text, focus) {
   const plain = normalized(text);
   const assets = [];
   for (const [asset, meta] of Object.entries(ASSETS)) {
@@ -236,7 +246,9 @@ function requestedAssets(text) {
     const pattern = new RegExp(`\\b(?:${terms.join("|")})\\b`);
     if (pattern.test(plain)) assets.push(asset);
   }
-  return assets.length > 0 ? assets : ["btc", "eth"];
+  if (assets.length > 0) return assets;
+  if (typeof focus === "string" && Object.hasOwn(ASSETS, focus)) return [focus];
+  return ["btc", "eth"];
 }
 
 function answerHasRequiredConfidence(answer, context, assets) {
@@ -266,11 +278,13 @@ function appendWithinLimit(answer, suffix) {
 export function templateAnswer(
   question,
   context,
-  intent = classifyAnalystQuestion(question),
+  intent = undefined,
+  focus = undefined,
 ) {
+  intent = intent ?? classifyAnalystQuestion(question, focus);
   // Answer about the coins the question named. With no coin named this falls
   // back to a couple of them rather than all eleven, which no longer fit.
-  const assets = requestedAssets(question);
+  const assets = requestedAssets(question, focus);
   let answer;
 
   if (intent === ANALYST_INTENTS.ADVICE) {
@@ -292,10 +306,10 @@ export function templateAnswer(
   return limitWords(answer);
 }
 
-export function finalizeAnalystResponse(answer, { question, context }) {
-  const intent = classifyAnalystQuestion(question);
+export function finalizeAnalystResponse(answer, { question, context, asset }) {
+  const intent = classifyAnalystQuestion(question, asset);
   const replacement = () => ({
-    answer: templateAnswer(question, context, intent),
+    answer: templateAnswer(question, context, intent, asset),
     replaced: true,
   });
 
@@ -318,7 +332,7 @@ export function finalizeAnalystResponse(answer, { question, context }) {
 
   let safe = limitWords(answer.replace(/\s+/g, " ").trim());
   if (mentionsForecast(safe)) {
-    const assets = requestedAssets(`${question} ${safe}`);
+    const assets = requestedAssets(`${question} ${safe}`, asset);
     if (!answerHasRequiredConfidence(safe, context, assets)) {
       safe = appendWithinLimit(
         safe,

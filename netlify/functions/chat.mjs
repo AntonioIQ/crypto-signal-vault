@@ -20,6 +20,7 @@ import {
   GROQ_MAX_OUTPUT_TOKENS,
   createGroqClient,
 } from "../lib/groq-client.mjs";
+import { ASSETS } from "../lib/coingecko.mjs";
 import { createSeedSnapshot } from "../lib/market-contract.mjs";
 import { readLatestSnapshot } from "./latest.mjs";
 
@@ -83,7 +84,15 @@ function errorResponse(code, message, options = {}) {
 }
 
 export function validateChatPayload(payload) {
-  if (!exactKeys(payload, ["question", "sessionId"])) {
+  // `asset` is optional and is the only context the client may supply: which
+  // coin the page is showing. Free-form history stays rejected — it would be a
+  // channel for injecting text straight into the prompt — but without any
+  // context at all a follow-up like "¿y por qué?" silently answered about
+  // bitcoin no matter what the reader was looking at. One value from a closed
+  // set carries no such risk.
+  const shape = exactKeys(payload, ["question", "sessionId"])
+    || exactKeys(payload, ["question", "sessionId", "asset"]);
+  if (!shape) {
     throw new TypeError("Invalid request shape.");
   }
   if (typeof payload.question !== "string" || typeof payload.sessionId !== "string") {
@@ -97,7 +106,14 @@ export function validateChatPayload(payload) {
   if (!UUID_V4_PATTERN.test(payload.sessionId)) {
     throw new TypeError("Invalid session identifier.");
   }
-  return { question, sessionId: payload.sessionId.toLowerCase() };
+  const validated = { question, sessionId: payload.sessionId.toLowerCase() };
+  if (Object.hasOwn(payload, "asset")) {
+    if (typeof payload.asset !== "string" || !Object.hasOwn(ASSETS, payload.asset)) {
+      throw new TypeError("Invalid asset.");
+    }
+    validated.asset = payload.asset;
+  }
+  return validated;
 }
 
 async function parseChatRequest(request) {
@@ -234,7 +250,7 @@ export function createChatHandler(dependencies = {}) {
     }
 
     const context = await safeContext(readSnapshotFn);
-    const intent = classifyAnalystQuestion(input.question);
+    const intent = classifyAnalystQuestion(input.question, input.asset);
 
     // Only questions about our own data reach the analyst. Refusing investment
     // advice, and refusing anything off-topic, are answered by fixed templates:
@@ -247,13 +263,16 @@ export function createChatHandler(dependencies = {}) {
     // drifts off the context, leaks the prompt or drops the published confidence.
     if (intent === ANALYST_INTENTS.ADVICE || intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
       return jsonResponse(
-        { answer: templateAnswer(input.question, context, intent), degraded: false },
+        {
+          answer: templateAnswer(input.question, context, intent, input.asset),
+          degraded: false,
+        },
         { origin },
       );
     }
 
     try {
-      const systemPrompt = buildAnalystSystemPrompt(context);
+      const systemPrompt = buildAnalystSystemPrompt(context, input.asset);
       const rawAnswer = await completeFn({
         systemPrompt,
         question: input.question,
@@ -261,6 +280,7 @@ export function createChatHandler(dependencies = {}) {
       const result = finalizeAnalystResponse(rawAnswer, {
         question: input.question,
         context,
+        asset: input.asset,
       });
       return jsonResponse(
         { answer: result.answer, degraded: result.replaced },
@@ -268,7 +288,10 @@ export function createChatHandler(dependencies = {}) {
       );
     } catch {
       return jsonResponse(
-        { answer: templateAnswer(input.question, context), degraded: true },
+        {
+          answer: templateAnswer(input.question, context, undefined, input.asset),
+          degraded: true,
+        },
         { origin },
       );
     }

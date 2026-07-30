@@ -81,7 +81,14 @@ export async function readChatConfig(fetchFn = globalThis.fetch) {
   return payload?.enabled === true;
 }
 
-export async function askAnalyst(question, sessionId, fetchFn = globalThis.fetch) {
+// Which coin the page is showing. Read from the DOM rather than wired through
+// app.js so the chat stays independent of it; the server validates the value
+// against its own asset list anyway.
+export function selectedAsset(root = globalThis.document) {
+  return root?.querySelector?.('.tab.active')?.dataset?.asset ?? null;
+}
+
+export async function askAnalyst(question, sessionId, fetchFn = globalThis.fetch, asset = selectedAsset()) {
   const normalized = normalizeQuestion(question);
   const response = await fetchWithTimeout(fetchFn, CHAT_ENDPOINT, {
     method: 'POST',
@@ -89,7 +96,7 @@ export async function askAnalyst(question, sessionId, fetchFn = globalThis.fetch
       accept: 'application/json',
       'content-type': 'application/json',
     },
-    body: JSON.stringify({ question: normalized, sessionId }),
+    body: JSON.stringify(asset ? { question: normalized, sessionId, asset } : { question: normalized, sessionId }),
   }, ANSWER_TIMEOUT_MS);
   const payload = await safeJson(response);
   if (!response.ok) {
