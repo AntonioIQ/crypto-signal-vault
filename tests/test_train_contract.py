@@ -21,6 +21,7 @@ from ml.train import (
     confidence_from_residuals,
     main,
     rolling_origin_residuals,
+    calibration_bands,
     _validate_magnitude,
     magnitude_estimate,
     _validate_directional_validation,
@@ -660,3 +661,74 @@ class MagnitudeShrinkageTests(unittest.TestCase):
         # And it must match the return it claims to shrink.
         with self.assertRaises(ArtifactValidationError):
             _validate_magnitude(block, 0.99, "assets.btc.summary.magnitude")
+
+
+class CalibrationTests(unittest.TestCase):
+    """Does a published confidence of X% come true X% of the time.
+
+    Rebuilt leave-one-out so it can be answered from the window we already have,
+    instead of waiting months for the prediction log to fill.
+    """
+
+    def _folds(self, pairs):
+        return [
+            ValidationFold(predicted_return=p, actual_return=a, momentum_return=0.0)
+            for p, a in pairs
+        ]
+
+    def test_a_model_that_is_always_right_lands_in_the_top_band(self) -> None:
+        # Predicts +3 % and it always happens: every residual is 0, so the
+        # rebuilt confidence is 100 % and the outcome always agrees.
+        bands = calibration_bands(self._folds([(0.03, 0.03)] * 25))
+        top = bands[-1]
+        self.assertEqual("80-100", top["band"])
+        self.assertEqual(25, top["sign_folds"])
+        self.assertEqual(100.0, top["sign_hit_rate_percent"])
+
+    def test_a_consistently_wrong_model_is_told_it_has_no_confidence(self) -> None:
+        # Predicts +3 % while it always falls 3 %. Every residual is -6 %, so
+        # adding a typical error flips the direction on every scenario and the
+        # rebuilt confidence is 0 % — the mechanism working, not failing. The
+        # bottom band then shows that those calls were indeed always wrong.
+        bands = calibration_bands(self._folds([(0.03, -0.03)] * 25))
+        bottom = bands[0]
+        self.assertEqual("0-39", bottom["band"])
+        self.assertEqual(25, bottom["sign_folds"])
+        self.assertEqual(0.0, bottom["sign_hit_rate_percent"])
+        self.assertEqual(0, bands[-1]["sign_folds"])
+
+    def test_flat_outcomes_are_excluded_so_the_answer_is_not_confounded(self) -> None:
+        # A high confidence goes with a large predicted move, which can never be
+        # scored flat; counting those folds would punish confidence for the
+        # policy's threshold rather than for being wrong.
+        bands = calibration_bands(self._folds([(0.03, 0.001)] * 25))
+        self.assertEqual(0, sum(band["sign_folds"] for band in bands))
+        self.assertTrue(all(band["sign_hit_rate_percent"] is None for band in bands))
+
+    def test_every_band_is_published_even_when_empty(self) -> None:
+        bands = calibration_bands(self._folds([(0.03, 0.03)] * 25))
+        self.assertEqual(["0-39", "40-59", "60-79", "80-100"], [b["band"] for b in bands])
+
+    def test_too_few_folds_publishes_nothing(self) -> None:
+        self.assertIsNone(calibration_bands([]))
+        self.assertIsNone(calibration_bands(self._folds([(0.01, 0.01)])))
+
+    def test_the_curve_survives_contract_validation(self) -> None:
+        folds = self._folds([(0.03, 0.03)] * 12 + [(0.01, -0.02)] * 13)
+        report = directional_validation(folds)
+        _validate_directional_validation(report, "assets.btc.summary.validation")
+        self.assertEqual(4, len(report["calibration"]))
+
+        for broken in (
+            {**report, "calibration": report["calibration"][:2]},
+            {**report, "calibration": [
+                {**report["calibration"][0], "band": "0-50"},
+                *report["calibration"][1:],
+            ]},
+            {**report, "calibration": [
+                {**report["calibration"][0], "sign_folds": 1, "sign_hit_rate_percent": None},
+                *report["calibration"][1:],
+            ]},
+        ):
+            with self.assertRaises(ArtifactValidationError):
+                _validate_directional_validation(broken, "assets.btc.summary.validation")

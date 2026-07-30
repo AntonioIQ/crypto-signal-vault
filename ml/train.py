@@ -367,6 +367,7 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
         "mean_absolute_error_percent": round(100.0 * model_error / total, 2),
         "naive_mean_absolute_error_percent": round(100.0 * naive_error / total, 2),
         "reliability": _reliability_bands(folds),
+        "calibration": calibration_bands(folds) or [],
     }
 
 
@@ -374,6 +375,61 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
 # same folds that produce the confidence, so a fine grid would only buy
 # in-sample precision we cannot defend.
 SHRINKAGE_GRID = (0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0)
+
+CALIBRATION_BANDS = ((0, 40), (40, 60), (60, 80), (80, 101))
+
+
+def calibration_bands(folds: Sequence[ValidationFold]) -> list[dict[str, Any]] | None:
+    """Does a published confidence of X% actually come true X% of the time?
+
+    Measured without waiting for the log to fill up: for each fold, the
+    confidence the site *would* have published is rebuilt from the residuals of
+    every OTHER fold — exactly how confidence_from_residuals works — and then
+    checked against what happened in that fold.
+
+    Judged on the sign, because the three-class policy would confound the answer:
+    a high confidence goes with a large predicted move, which can never be scored
+    as "flat" and so would look wrong whenever the market barely moved.
+
+    Measured on the real window this comes out inverted, and the mechanism is
+    mechanical rather than mysterious: confidence rises when the predicted move
+    is large next to the model's typical error, and a large predicted move is
+    precisely where this model overshoots. Publishing the number as a chance of
+    being right is therefore not defensible, which is why the curve is published
+    next to it.
+    """
+
+    if len(folds) < 2:
+        return None
+
+    scored: list[tuple[float, bool]] = []
+    for index, fold in enumerate(folds):
+        others = [
+            other.actual_return - other.predicted_return
+            for position, other in enumerate(folds)
+            if position != index
+        ]
+        emitted = classify_direction(fold.predicted_return)
+        agreeing = sum(
+            1 for residual in others
+            if classify_direction(fold.predicted_return + residual) == emitted
+        )
+        confidence = 100.0 * agreeing / len(others)
+        if classify_direction(fold.actual_return) == "flat":
+            continue
+        scored.append((confidence, (fold.predicted_return >= 0) == (fold.actual_return >= 0)))
+
+    bands = []
+    for low, high in CALIBRATION_BANDS:
+        selected = [hit for confidence, hit in scored if low <= confidence < high]
+        bands.append({
+            "band": f"{low}-{high - 1}",
+            "sign_folds": len(selected),
+            "sign_hit_rate_percent": (
+                round(100.0 * sum(selected) / len(selected), 1) if selected else None
+            ),
+        })
+    return bands
 
 
 def magnitude_estimate(
@@ -676,6 +732,7 @@ def _validate_directional_validation(value: Any, field: str) -> None:
             "mean_absolute_error_percent",
             "naive_mean_absolute_error_percent",
             "reliability",
+            "calibration",
         },
         field,
     )
@@ -711,6 +768,28 @@ def _validate_directional_validation(value: Any, field: str) -> None:
             raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must not exceed one decimal")
     if sum(entry["folds"] for entry in block["reliability"]) != block["origins"]:
         raise ArtifactValidationError(f"{field}.reliability must account for every origin")
+
+    if not isinstance(block["calibration"], list):
+        raise ArtifactValidationError(f"{field}.calibration must be a list")
+    if block["calibration"]:
+        expected = [f"{low}-{high - 1}" for low, high in CALIBRATION_BANDS]
+        if len(block["calibration"]) != len(expected):
+            raise ArtifactValidationError(f"{field}.calibration must list every band once")
+        for index, band in enumerate(block["calibration"]):
+            label = f"{field}.calibration[{index}]"
+            entry = _exact_object(band, {"band", "sign_folds", "sign_hit_rate_percent"}, label)
+            if entry["band"] != expected[index]:
+                raise ArtifactValidationError(f"{label}.band must be {expected[index]!r}")
+            if not isinstance(entry["sign_folds"], int) or isinstance(entry["sign_folds"], bool) or entry["sign_folds"] < 0:
+                raise ArtifactValidationError(f"{label}.sign_folds must be a non-negative integer")
+            rate = entry["sign_hit_rate_percent"]
+            if rate is None:
+                if entry["sign_folds"] != 0:
+                    raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must be a percentage")
+            elif not _is_finite_number(rate) or not 0.0 <= float(rate) <= 100.0:
+                raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must be a percentage")
+            elif round(float(rate), 1) != float(rate):
+                raise ArtifactValidationError(f"{label}.sign_hit_rate_percent must not exceed one decimal")
     for count in ("origins", "sign_folds"):
         if not isinstance(block[count], int) or isinstance(block[count], bool) or block[count] < 0:
             raise ArtifactValidationError(f"{field}.{count} must be a non-negative integer")

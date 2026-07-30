@@ -543,6 +543,12 @@ test("the validation block is optional and travels to the public forecast", () =
       { band: "medium", folds: 21, sign_folds: 17, sign_hit_rate_percent: 29.4 },
       { band: "large", folds: 66, sign_folds: 61, sign_hit_rate_percent: 56.7 },
     ],
+    calibration: [
+      { band: "0-39", sign_folds: 13, sign_hit_rate_percent: 38.5 },
+      { band: "40-59", sign_folds: 31, sign_hit_rate_percent: 58.1 },
+      { band: "60-79", sign_folds: 44, sign_hit_rate_percent: 36.4 },
+      { band: "80-100", sign_folds: 33, sign_hit_rate_percent: 27.3 },
+    ],
   };
 
   const withBlock = artifactFixture();
@@ -581,6 +587,12 @@ test("a hit rate outside 0-100, over-precise, or unscoreable is rejected", () =>
       { band: "small", folds: 3, sign_folds: 2, sign_hit_rate_percent: 50 },
       { band: "medium", folds: 21, sign_folds: 17, sign_hit_rate_percent: 29.4 },
       { band: "large", folds: 66, sign_folds: 61, sign_hit_rate_percent: 56.7 },
+    ],
+    calibration: [
+      { band: "0-39", sign_folds: 13, sign_hit_rate_percent: 38.5 },
+      { band: "40-59", sign_folds: 31, sign_hit_rate_percent: 58.1 },
+      { band: "60-79", sign_folds: 44, sign_hit_rate_percent: 36.4 },
+      { band: "80-100", sign_folds: 33, sign_hit_rate_percent: 27.3 },
     ],
   };
 

@@ -185,6 +185,7 @@ function validateDirectionalValidation(value, label) {
       "mean_absolute_error_percent",
       "naive_mean_absolute_error_percent",
       "reliability",
+      "calibration",
     ],
     label,
   );
@@ -277,6 +278,49 @@ function validateDirectionalValidation(value, label) {
   });
   if (counted !== block.origins) {
     throw new ForecastContractError(`${label}.reliability must account for every origin.`);
+  }
+
+  // Does a published confidence of X% actually come true X% of the time. Empty
+  // when there were too few folds to rebuild it.
+  if (!Array.isArray(block.calibration)) {
+    throw new ForecastContractError(`${label}.calibration must be an array.`);
+  }
+  if (block.calibration.length > 0) {
+    const expected = ["0-39", "40-59", "60-79", "80-100"];
+    if (block.calibration.length !== expected.length) {
+      throw new ForecastContractError(`${label}.calibration must list every band once.`);
+    }
+    block.calibration.forEach((value_, index) => {
+      const entry = requireExactObject(
+        value_,
+        ["band", "sign_folds", "sign_hit_rate_percent"],
+        `${label}.calibration[${index}]`,
+      );
+      if (entry.band !== expected[index]) {
+        throw new ForecastContractError(
+          `${label}.calibration[${index}].band must be "${expected[index]}".`,
+        );
+      }
+      if (!Number.isInteger(entry.sign_folds) || entry.sign_folds < 0) {
+        throw new ForecastContractError(
+          `${label}.calibration[${index}].sign_folds must be a non-negative integer.`,
+        );
+      }
+      const rate = entry.sign_hit_rate_percent;
+      if (rate === null) {
+        if (entry.sign_folds !== 0) {
+          throw new ForecastContractError(
+            `${label}.calibration[${index}].sign_hit_rate_percent must be a percentage.`,
+          );
+        }
+        return;
+      }
+      if (!isFiniteNumber(rate) || rate < 0 || rate > 100 || Math.round(rate * 10) / 10 !== rate) {
+        throw new ForecastContractError(
+          `${label}.calibration[${index}].sign_hit_rate_percent must be a percentage.`,
+        );
+      }
+    });
   }
 }
 
