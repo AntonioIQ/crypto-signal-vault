@@ -370,6 +370,49 @@ def directional_validation(folds: Sequence[ValidationFold]) -> dict[str, Any] | 
     }
 
 
+# Candidate shrinkages, coarse on purpose: this is one parameter fitted on the
+# same folds that produce the confidence, so a fine grid would only buy
+# in-sample precision we cannot defend.
+SHRINKAGE_GRID = (0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 1.0)
+
+
+def magnitude_estimate(
+    raw_terminal_return: float,
+    folds: Sequence[ValidationFold],
+) -> dict[str, Any] | None:
+    """The honest point estimate of the move, and how wrong it usually is.
+
+    Extrapolating a trend 48h out costs accuracy when the series is close to a
+    random walk: measured on the real window the raw forecast's magnitude error
+    is well over the error of simply saying "no change". Shrinking the forecast
+    toward no change by the factor that minimises that error recovers it, and
+    because sign(lambda * x) == sign(x) for lambda > 0 it leaves the directional
+    signal — the part that does carry information — untouched.
+
+    ``direction`` is therefore still derived from the raw return; this block only
+    governs the size that gets published, next to the error it carries so the
+    number is never read as precise.
+    """
+
+    if not folds:
+        return None
+
+    def error_at(weight: float) -> float:
+        return sum(
+            abs(fold.actual_return - weight * fold.predicted_return) for fold in folds
+        ) / len(folds)
+
+    shrinkage = min(SHRINKAGE_GRID, key=error_at)
+    return {
+        "point_estimate_return": round(raw_terminal_return * shrinkage, 6),
+        "shrinkage": shrinkage,
+        "mean_absolute_error_percent": round(100.0 * error_at(shrinkage), 2),
+        # What the unshrunk forecast would have cost, so the correction is
+        # auditable rather than taken on faith.
+        "raw_mean_absolute_error_percent": round(100.0 * error_at(1.0), 2),
+    }
+
+
 # Whether a bigger predicted move is actually more often right. A model whose
 # confident calls are no better than its timid ones is not telling us anything
 # with the size of its forecast, however good its overall hit rate looks.
@@ -442,6 +485,7 @@ def _build_asset_forecast(
     )
     residuals = [fold.actual_return - fold.predicted_return for fold in folds]
     validation = directional_validation(folds)
+    magnitude = magnitude_estimate(emitted_terminal_return, folds)
     metadata = SUPPORTED_ASSETS[asset]
     return {
         "id": metadata["coin_id"],
@@ -459,6 +503,7 @@ def _build_asset_forecast(
             "direction": classify_direction(emitted_terminal_return),
             "confidence": confidence_from_residuals(emitted_terminal_return, residuals),
             **({"validation": validation} if validation is not None else {}),
+            **({"magnitude": magnitude} if magnitude is not None else {}),
         },
     }
 
@@ -574,6 +619,46 @@ def _is_finite_number(value: Any) -> bool:
         and isinstance(value, (int, float))
         and math.isfinite(float(value))
     )
+
+
+def _validate_magnitude(value: Any, terminal_return: float, field: str) -> None:
+    """The published size of the move, and the error it carries.
+
+    Checked against the raw return so the shrinkage cannot silently drift away
+    from the forecast it is supposed to be shrinking.
+    """
+
+    block = _exact_object(
+        value,
+        {
+            "point_estimate_return",
+            "shrinkage",
+            "mean_absolute_error_percent",
+            "raw_mean_absolute_error_percent",
+        },
+        field,
+    )
+    if block["shrinkage"] not in SHRINKAGE_GRID:
+        raise ArtifactValidationError(f"{field}.shrinkage must come from the searched grid")
+    if not _is_finite_number(block["point_estimate_return"]):
+        raise ArtifactValidationError(f"{field}.point_estimate_return must be finite")
+    expected = round(terminal_return * float(block["shrinkage"]), 6)
+    if not math.isclose(float(block["point_estimate_return"]), expected, rel_tol=0.0, abs_tol=1e-9):
+        raise ArtifactValidationError(
+            f"{field}.point_estimate_return must equal terminal_return times shrinkage"
+        )
+    for error in ("mean_absolute_error_percent", "raw_mean_absolute_error_percent"):
+        published = block[error]
+        if not _is_finite_number(published) or float(published) < 0.0:
+            raise ArtifactValidationError(f"{field}.{error} must be a non-negative number")
+        if round(float(published), 2) != float(published):
+            raise ArtifactValidationError(f"{field}.{error} must not exceed two decimals")
+    # The chosen shrinkage is the one that minimised the error, so it can never
+    # be worse than leaving the forecast alone.
+    if float(block["mean_absolute_error_percent"]) > float(block["raw_mean_absolute_error_percent"]):
+        raise ArtifactValidationError(
+            f"{field}.mean_absolute_error_percent cannot exceed the unshrunk error"
+        )
 
 
 def _validate_directional_validation(value: Any, field: str) -> None:
@@ -760,11 +845,19 @@ def _validate_asset(asset: str, value: Any, generated_at: datetime) -> datetime:
             )
 
     summary_fields = {"terminal_return", "direction", "confidence"}
-    if isinstance(item["summary"], Mapping) and "validation" in item["summary"]:
-        summary_fields = summary_fields | {"validation"}
+    if isinstance(item["summary"], Mapping):
+        summary_fields = summary_fields | (
+            {"validation", "magnitude"} & set(item["summary"])
+        )
     summary = _exact_object(item["summary"], summary_fields, f"assets.{asset}.summary")
     if "validation" in summary:
         _validate_directional_validation(summary["validation"], f"assets.{asset}.summary.validation")
+    if "magnitude" in summary:
+        _validate_magnitude(
+            summary["magnitude"],
+            float(summary["terminal_return"]),
+            f"assets.{asset}.summary.magnitude",
+        )
     expected_terminal = float(forecast[-1]["return_factor"]) - 1.0
     if not _is_finite_number(summary["terminal_return"]) or not math.isclose(
         float(summary["terminal_return"]),

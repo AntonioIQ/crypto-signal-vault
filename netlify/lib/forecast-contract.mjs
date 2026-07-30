@@ -280,6 +280,53 @@ function validateDirectionalValidation(value, label) {
   }
 }
 
+// The published size of the move, shrunk toward "no change" by the factor that
+// minimised its error, next to the error it still carries. Checked against the
+// raw return so the shrinkage cannot drift from the forecast it shrinks.
+const SHRINKAGE_GRID = [0, 0.1, 0.2, 0.3, 0.5, 0.7, 1];
+
+function validateMagnitude(value, terminalReturn, label) {
+  const block = requireExactObject(
+    value,
+    [
+      "point_estimate_return",
+      "shrinkage",
+      "mean_absolute_error_percent",
+      "raw_mean_absolute_error_percent",
+    ],
+    label,
+  );
+
+  if (!SHRINKAGE_GRID.includes(block.shrinkage)) {
+    throw new ForecastContractError(`${label}.shrinkage must come from the searched grid.`);
+  }
+  if (!isFiniteNumber(block.point_estimate_return)) {
+    throw new ForecastContractError(`${label}.point_estimate_return must be finite.`);
+  }
+  const expected = Number((terminalReturn * block.shrinkage).toFixed(6));
+  if (Math.abs(block.point_estimate_return - expected) > 1e-9) {
+    throw new ForecastContractError(
+      `${label}.point_estimate_return must equal terminal_return times shrinkage.`,
+    );
+  }
+  for (const key of ["mean_absolute_error_percent", "raw_mean_absolute_error_percent"]) {
+    const error = block[key];
+    if (!isFiniteNumber(error) || error < 0) {
+      throw new ForecastContractError(`${label}.${key} must be a non-negative number.`);
+    }
+    if (Math.round(error * 100) / 100 !== error) {
+      throw new ForecastContractError(`${label}.${key} must not exceed two decimals.`);
+    }
+  }
+  // The shrinkage was picked to minimise the error, so it cannot be worse than
+  // leaving the forecast alone.
+  if (block.mean_absolute_error_percent > block.raw_mean_absolute_error_percent) {
+    throw new ForecastContractError(
+      `${label}.mean_absolute_error_percent cannot exceed the unshrunk error.`,
+    );
+  }
+}
+
 function validateArtifactAsset(value, asset, generatedAt) {
   const item = requireExactObject(
     value,
@@ -340,13 +387,12 @@ function validateArtifactAsset(value, asset, generatedAt) {
   // validation is optional and additive: artifacts published before the
   // measured hit rates existed stay valid.
   const summaryFields = ["terminal_return", "direction", "confidence"];
-  const summary = requireExactObject(
-    item.summary,
-    isRecord(item.summary) && Object.hasOwn(item.summary, "validation")
-      ? [...summaryFields, "validation"]
-      : summaryFields,
-    `assets.${asset}.summary`,
-  );
+  if (isRecord(item.summary)) {
+    for (const optional of ["validation", "magnitude"]) {
+      if (Object.hasOwn(item.summary, optional)) summaryFields.push(optional);
+    }
+  }
+  const summary = requireExactObject(item.summary, summaryFields, `assets.${asset}.summary`);
   const expectedTerminal = item.forecast[47].return_factor - 1;
   if (
     !isFiniteNumber(summary.terminal_return) ||
@@ -360,6 +406,13 @@ function validateArtifactAsset(value, asset, generatedAt) {
     validateDirectionalValidation(
       summary.validation,
       `assets.${asset}.summary.validation`,
+    );
+  }
+  if (Object.hasOwn(summary, "magnitude")) {
+    validateMagnitude(
+      summary.magnitude,
+      summary.terminal_return,
+      `assets.${asset}.summary.magnitude`,
     );
   }
 
@@ -529,15 +582,21 @@ export function unavailableForecast() {
 
 function validatePublicForecastAsset(value, asset, anchoredAt) {
   const publicFields = ["direction", "terminal_return", "confidence", "points"];
-  const item = requireExactObject(
-    value,
-    isRecord(value) && Object.hasOwn(value, "validation")
-      ? [...publicFields, "validation"]
-      : publicFields,
-    `forecast.assets.${asset}`,
-  );
+  if (isRecord(value)) {
+    for (const optional of ["validation", "magnitude"]) {
+      if (Object.hasOwn(value, optional)) publicFields.push(optional);
+    }
+  }
+  const item = requireExactObject(value, publicFields, `forecast.assets.${asset}`);
   if (Object.hasOwn(item, "validation")) {
     validateDirectionalValidation(item.validation, `forecast.assets.${asset}.validation`);
+  }
+  if (Object.hasOwn(item, "magnitude")) {
+    validateMagnitude(
+      item.magnitude,
+      item.terminal_return,
+      `forecast.assets.${asset}.magnitude`,
+    );
   }
   if (
     !["up", "down", "flat"].includes(item.direction) ||
@@ -671,6 +730,9 @@ export function anchorForecast(artifact, status, marketSnapshot, formatTimestamp
             // something. Absent on artifacts published before it existed.
             ...(Object.hasOwn(modelAsset.summary, "validation")
               ? { validation: clone(modelAsset.summary.validation) }
+              : {}),
+            ...(Object.hasOwn(modelAsset.summary, "magnitude")
+              ? { magnitude: clone(modelAsset.summary.magnitude) }
               : {}),
             points: modelAsset.forecast.map((point) => ({
               offset_hours: point.offset_hours,

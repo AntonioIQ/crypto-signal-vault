@@ -21,6 +21,8 @@ from ml.train import (
     confidence_from_residuals,
     main,
     rolling_origin_residuals,
+    _validate_magnitude,
+    magnitude_estimate,
     _validate_directional_validation,
     rolling_origin_folds,
     directional_validation,
@@ -587,3 +589,74 @@ class MagnitudeAndReliabilityTests(unittest.TestCase):
         ):
             with self.assertRaises(ArtifactValidationError):
                 _validate_directional_validation(broken, "assets.btc.summary.validation")
+
+
+class MagnitudeShrinkageTests(unittest.TestCase):
+    """Extrapolating a trend 48h out costs accuracy on a near-random-walk series.
+    The published size is shrunk by the factor that minimises that error, which
+    leaves the direction untouched because sign(lambda * x) == sign(x)."""
+
+    def _folds(self, pairs):
+        return [
+            ValidationFold(predicted_return=p, actual_return=a, momentum_return=0.0)
+            for p, a in pairs
+        ]
+
+    def test_a_forecast_that_overshoots_gets_shrunk(self) -> None:
+        # The model keeps calling +10 % when the move is +1 %: its magnitude is
+        # ten times too big, so the best weight is the smallest one that lands on
+        # the truth.
+        folds = self._folds([(0.10, 0.01)] * 30)
+        block = magnitude_estimate(0.10, folds)
+
+        self.assertEqual(0.1, block["shrinkage"])
+        self.assertAlmostEqual(0.01, block["point_estimate_return"])
+        self.assertEqual(0.0, block["mean_absolute_error_percent"])
+        self.assertEqual(9.0, block["raw_mean_absolute_error_percent"])
+
+    def test_a_well_sized_forecast_is_left_alone(self) -> None:
+        folds = self._folds([(0.02, 0.02)] * 30)
+        block = magnitude_estimate(0.02, folds)
+        self.assertEqual(1.0, block["shrinkage"])
+        self.assertAlmostEqual(0.02, block["point_estimate_return"])
+
+    def test_shrinking_never_makes_the_error_worse(self) -> None:
+        # Whatever the folds look like, the chosen weight minimises the error, so
+        # it can never be beaten by leaving the forecast alone.
+        for pairs in (
+            [(0.05, 0.01)] * 25,
+            [(0.01, 0.05)] * 25,
+            [(0.02, -0.03), (0.04, 0.05), (-0.01, 0.02)] * 9,
+        ):
+            block = magnitude_estimate(pairs[0][0], self._folds(pairs))
+            self.assertLessEqual(
+                block["mean_absolute_error_percent"],
+                block["raw_mean_absolute_error_percent"],
+            )
+
+    def test_direction_survives_the_shrinkage(self) -> None:
+        # The whole point: the size is corrected, the sign is not touched.
+        for raw in (0.08, -0.08):
+            block = magnitude_estimate(raw, self._folds([(raw, raw / 10)] * 25))
+            self.assertGreater(block["shrinkage"], 0.0)
+            self.assertEqual(raw >= 0, block["point_estimate_return"] >= 0)
+
+    def test_no_folds_publishes_nothing(self) -> None:
+        self.assertIsNone(magnitude_estimate(0.02, []))
+
+    def test_contract_ties_the_estimate_to_the_raw_return(self) -> None:
+        block = magnitude_estimate(0.10, self._folds([(0.10, 0.01)] * 30))
+        _validate_magnitude(block, 0.10, "assets.btc.summary.magnitude")
+
+        for broken in (
+            {**block, "shrinkage": 0.15},                      # off the grid
+            {**block, "point_estimate_return": 0.05},           # not raw * shrinkage
+            {**block, "mean_absolute_error_percent": 99.0},     # worse than unshrunk
+            {**block, "raw_mean_absolute_error_percent": -1.0},
+        ):
+            with self.assertRaises(ArtifactValidationError):
+                _validate_magnitude(broken, 0.10, "assets.btc.summary.magnitude")
+
+        # And it must match the return it claims to shrink.
+        with self.assertRaises(ArtifactValidationError):
+            _validate_magnitude(block, 0.99, "assets.btc.summary.magnitude")

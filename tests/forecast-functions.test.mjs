@@ -614,3 +614,43 @@ test("a hit rate outside 0-100, over-precise, or unscoreable is rejected", () =>
   };
   assert.doesNotThrow(() => assertValidForecastArtifact(artifact));
 });
+
+test("the shrunk magnitude is optional, tied to the raw return, and reaches the page", () => {
+  const magnitude = {
+    point_estimate_return: 0.002,
+    shrinkage: 0.1,
+    mean_absolute_error_percent: 2.76,
+    raw_mean_absolute_error_percent: 4.44,
+  };
+
+  const artifact = artifactFixture();
+  const raw = artifact.assets.btc.summary.terminal_return;
+  const tied = { ...magnitude, point_estimate_return: Number((raw * 0.1).toFixed(6)) };
+  artifact.assets.btc.summary.magnitude = tied;
+  assert.doesNotThrow(() => assertValidForecastArtifact(artifact));
+
+  const snapshot = createFreshSnapshot(SAMPLE_PRICES, new Date("2026-07-17T02:15:00-06:00"));
+  const forecast = anchorForecast(
+    artifact,
+    forecastArtifactStatus(artifact, new Date("2026-07-17T02:15:00-06:00")),
+    snapshot,
+    formatMexicoCityTimestamp,
+  );
+  assert.deepEqual(forecast.assets.btc.magnitude, tied);
+  assert.doesNotThrow(() => assertValidPublicForecast(forecast));
+
+  // The sign is never touched: that is the part that carries information.
+  assert.equal(tied.point_estimate_return >= 0, raw >= 0);
+
+  for (const broken of [
+    { ...tied, shrinkage: 0.15 },
+    { ...tied, point_estimate_return: raw },
+    { ...tied, mean_absolute_error_percent: 9.9 },
+    { ...tied, raw_mean_absolute_error_percent: -1 },
+    { ...tied, surprise: 1 },
+  ]) {
+    const bad = artifactFixture();
+    bad.assets.btc.summary.magnitude = broken;
+    assert.throws(() => assertValidForecastArtifact(bad), /magnitude/);
+  }
+});
