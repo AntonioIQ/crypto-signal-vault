@@ -98,6 +98,38 @@ export function containsUngroundedExplanation(answer) {
 // up, which is the one failure this product cannot ship.
 const PRODUCT_NUMBERS = [0, 24, 30, 48, 90, 100, 120, 7];
 
+// A published timestamp is a published figure. Without this, an answer to "¿cuándo
+// fue la última medición?" was refused for saying "21 de julio a las 12:00" — the
+// digits of a date we ourselves publish — and the reader got a canned forecast
+// instead of an answer.
+function timestampNumbers(value) {
+  if (typeof value !== "string") return [];
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return [];
+
+  // The digits as written, plus how the site renders them in Mexico City: the
+  // analyst may reasonably say either.
+  const numbers = (value.match(/\d+/g) ?? []).map(Number).filter(Number.isFinite);
+  try {
+    const parts = new Intl.DateTimeFormat("es-MX", {
+      timeZone: "America/Mexico_City",
+      year: "numeric", month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric", hour12: false,
+    }).formatToParts(new Date(parsed));
+    for (const part of parts) {
+      const numeric = Number(part.value);
+      if (Number.isFinite(numeric)) {
+        numbers.push(numeric);
+        // "las 5" for 17:00 — the analyst writes the way people speak.
+        if (part.type === "hour" && numeric > 12) numbers.push(numeric - 12);
+      }
+    }
+  } catch {
+    // A malformed timestamp simply grounds nothing extra.
+  }
+  return numbers;
+}
+
 function groundedValues(context) {
   const values = [...PRODUCT_NUMBERS];
   const push = (value) => {
@@ -106,8 +138,12 @@ function groundedValues(context) {
     }
   };
 
+  values.push(...timestampNumbers(context?.generated_at));
+
   for (const item of Object.values(context?.assets ?? {})) {
     push(item.price_usd);
+    values.push(...timestampNumbers(item.source_updated_at));
+    values.push(...timestampNumbers(item.accuracy?.measured_through));
     const forecast = item.forecast ?? {};
     push(forecast.horizon_hours);
     push(forecast.terminal_change_percent);

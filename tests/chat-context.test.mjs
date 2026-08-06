@@ -233,3 +233,34 @@ test("templates answer about the coin asked and are never truncated", () => {
     "an unnamed question must not recite every coin",
   );
 });
+
+// Reported from the phone: "¿cuándo fue la última medición y la última
+// predicción?" came back as a canned forecast. The analyst had answered
+// correctly with the dates, and the grounded-number check refused it for citing
+// the digits of timestamps this very context publishes.
+test("dates we publish are grounded, invented ones are not", () => {
+  const context = buildAnalystContext(chatSnapshot());
+
+  for (const dated of [
+    "La lectura se ancló el 21 de julio a las 12:00.",
+    "La precisión se midió hasta el 21 de julio a las 11:30.",
+    "Los datos son del 21 de julio de 2026.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(dated, context),
+      false,
+      `should be grounded: ${dated}`,
+    );
+  }
+
+  for (const invented of [
+    "La última medición fue el 3 de marzo de 2019.",
+    "Se midió el 15 de enero a las 4:45.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(invented, context),
+      true,
+      `should be rejected: ${invented}`,
+    );
+  }
+});
