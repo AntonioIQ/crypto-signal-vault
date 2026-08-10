@@ -208,6 +208,15 @@ export function createChatHandler(dependencies = {}) {
   return async function chatHandler(request) {
     const requestOrigin = request.headers.get("origin");
     const allowedOrigins = chatAllowedOrigins(env);
+    // The page that calls this function is served from the same host, so its
+    // own origin is allowed whatever context it is deployed in. The env vars
+    // this used to rely on (URL/DEPLOY_URL/DEPLOY_PRIME_URL) are build-time
+    // values and are not in the function runtime, so on a deploy preview the
+    // chat answered 403 to its own page and the section never appeared — the
+    // feature could not be reviewed anywhere except production. Cross-origin
+    // callers are still refused, which is the whole point of the check.
+    const selfOrigin = normalizedOrigin(request.url);
+    if (selfOrigin) allowedOrigins.add(selfOrigin);
     const origin = normalizedOrigin(requestOrigin);
     const originAllowed = origin !== null && allowedOrigins.has(origin);
 

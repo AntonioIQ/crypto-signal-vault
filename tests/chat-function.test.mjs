@@ -87,6 +87,39 @@ test("CORS rejects foreign, null, and missing origins before quota or provider",
   assert.equal(touched, false);
 });
 
+// URL/DEPLOY_URL/DEPLOY_PRIME_URL are build-time values and are not present in
+// the function runtime, so on a deploy preview the chat refused its own page
+// with 403 and the section never appeared: the feature was unreviewable outside
+// production. The page is served from the same host as the function, so its own
+// origin is allowed wherever it is deployed.
+test("the page's own origin is allowed in any deploy context", async () => {
+  const preview = "https://deploy-preview-5--likelycoin.netlify.app";
+  const handler = enabledHandler({ env: { CHAT_ENABLED: "true" } });
+
+  const config = await handler(new Request(`${preview}/api/chat`, {
+    method: "GET",
+    headers: { origin: preview },
+  }));
+  assert.equal(config.status, 200, "the flag must be readable from its own page");
+  assert.equal(config.headers.get("access-control-allow-origin"), preview);
+
+  const answer = await handler(new Request(`${preview}/api/chat`, {
+    method: "POST",
+    headers: { origin: preview, "content-type": "application/json" },
+    body: JSON.stringify({ question: "Hola", sessionId: SESSION_ID }),
+  }));
+  assert.equal(answer.status, 200);
+
+  // A different site is still refused, which is the point of the check.
+  const foreign = await handler(new Request(`${preview}/api/chat`, {
+    method: "POST",
+    headers: { origin: "https://attacker.example", "content-type": "application/json" },
+    body: JSON.stringify({ question: "Hola", sessionId: SESSION_ID }),
+  }));
+  assert.equal(foreign.status, 403);
+  assert.equal(foreign.headers.get("access-control-allow-origin"), null);
+});
+
 test("deploy preview origin must be supplied explicitly by Netlify runtime", async () => {
   const preview = "https://deploy-preview-4--likelycoin.netlify.app";
   const handler = enabledHandler({
