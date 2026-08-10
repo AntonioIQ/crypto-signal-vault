@@ -4,6 +4,58 @@
 
 ---
 
+## 2026-08-10 (tarde) — EL ANALISTA CONVERSACIONAL EN PRODUCCIÓN ✅
+
+Misma sesión, segunda mitad: del contrato al sitio en línea. PR #5 mergeada
+(`182e249`), **1 deploy = 15 créditos**, cero env vars nuevas. 166 pruebas Node +
+61 Python.
+
+**Lo que se construyó**, en el orden del §9 del contrato: cuota primero, luego el
+transporte del hilo, los mensajes con rol hacia Groq, los dominios `CONCEPT` y
+`GENERAL` con glosario, el guard `claimsOurMeasurement`, el prompt
+`analyst-system/2.0` y la transcripción en la UI con botón de borrado.
+
+**Verificado contra Groq real** en el preview y otra vez en producción. El turno
+que más dice: «¿y eso qué tan confiable es?» sin repetir contexto → se quedó en
+Bitcoin **y explicó que una confianza alta todavía no se traduce en más acierto**.
+Eso es la medición del 29-jul (`b62ed10`) saliendo sola en una plática. También
+probado: rechazo de asesoría sin tocar el proveedor, seis variantes de inyección
+bloqueadas, concepto explicado con nuestras palabras, y tema general con su línea
+fija «Esto no sale de lo que medimos en LikelyCoin:».
+
+**Tres bugs, y el segundo es el que más duele**:
+
+1. `recomiend\b` **nunca hizo match con nada** desde la Fase 4 — «recomiendas» no
+   tiene frontera de palabra tras el stem; estaba tapado porque «comprar»
+   matcheaba en las mismas frases. De paso, el clasificador de asesoría disparaba
+   con esa palabra sola, así que pedir una película contestaba «no puedo decirte
+   si debes comprar o vender». Ahora los verbos transaccionales son asesoría
+   siempre y las palabras de recomendación solo cuando el tema es dinero.
+2. **El chat respondía 403 a su propia página en cualquier deploy preview**, así
+   que la sección nunca aparecía. Los orígenes permitidos salían de
+   `URL`/`DEPLOY_URL`/`DEPLOY_PRIME_URL`, que son variables de *build* y no
+   existen en el runtime de Functions. Consecuencia real: desde la Fase 4, el
+   chat **solo se podía revisar en producción**, que es exactamente donde no se
+   debe revisar nada por primera vez. Lo encontré porque intenté probar el
+   preview antes de mergear; si hubiera confiado en los tests, se habría ido a
+   producción sin que nadie lo tocara con un navegador.
+3. La cuota cobraba **un byte por token**: 3 preguntas por minuto para todo el
+   sitio, antes de que existiera historial. Dividir entre 3 → peor caso 4,835 y 6
+   concurrentes.
+
+**Una prueba me corrigió a mí.** Implementé el §7 tal como lo había escrito en la
+mañana —cobrar los bytes del prompt ya construido— y `chat-function.test.mjs`
+falló: eso obliga a leer el snapshot antes de reservar la cuota, y hay una
+propiedad deliberada de que una petición rechazada no cueste trabajo. Reverti el
+orden y corregí el documento. El problema nunca fue el orden, era la conversión
+de bytes a tokens.
+
+**Lección de créditos, por fin aplicada**: Fase 4 costó 2 deploys por una env var
+faltante y las 11 monedas otros 2 por el CI. Esta vez los docs viajaron dentro
+del mismo merge y el fix de CORS entró antes de mergear: **un solo deploy**.
+
+---
+
 ## 2026-08-10 — Contrato del Analista conversacional + dos semanas de deuda documental
 
 **Cómo empezó**: Antonio preguntó qué estábamos actualizando. La respuesta fue

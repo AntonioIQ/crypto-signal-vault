@@ -2,43 +2,69 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-08-10 13:00 (hora CDMX)
+**Última actualización**: 2026-08-10 16:50 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: Analista conversacional — CONTRATO ESCRITO, sin código (2026-08-10)
+## Fase activa: ninguna — ANALISTA CONVERSACIONAL EN PRODUCCIÓN ✅ (2026-08-10)
 
-Antonio decidió el 10-ago que el siguiente paso es **convertir el chat de una
-pregunta suelta en una plática con memoria**: que recuerde el hilo, conteste
-preguntas de temas variados y de conceptos, y vuelva a las monedas sin repetir
-contexto. El contrato completo quedó en [`08_CONVERSACION.md`](08_CONVERSACION.md)
-**antes de tocar código**, como manda la regla del proyecto.
+El chat dejó de ser una pregunta suelta y es una plática. PR [#5](https://github.com/AntonioIQ/crypto-signal-vault/pull/5)
+mergeada (`182e249`), **1 deploy = 15 créditos**, sin env vars nuevas. Contrato
+completo en [`08_CONVERSACION.md`](08_CONVERSACION.md), escrito antes del código.
+
+**Qué cambió para quien lo usa**: el hilo vive en `sessionStorage` del lector y
+viaja con cada pregunta, así que un seguimiento («¿y por qué?») ya sabe de qué se
+habla. La transcripción queda en pantalla y sobrevive un refresh. Responde de
+otros temas y de conceptos de cripto. Hay botón «Borrar conversación», que es el
+único borrado necesario porque **el servidor no guarda nada**: lee el hilo y lo
+tira, así que la promesa de privacidad de `01_ARQUITECTURA.md` §8 sigue siendo
+literalmente cierta.
 
 **Decisiones de Antonio** (las dos primeras contra mi recomendación, tomadas con
-el trade-off explícito sobre la mesa):
+el trade-off explícito sobre la mesa; riesgo aceptado en §6.3 del contrato):
 
 | Decisión | Elegido | Costo asumido |
 |---|---|---|
-| Alcance del temario | **Asistente general** — responde de cualquier tema y vuelve a cripto | Se pierde el filtro que hoy mantiene el texto ajeno lejos de Groq; todas las preguntas fuera de tema pasan a costar inferencia |
-| Dónde vive el hilo | **En el navegador**, validado al llegar | Reabre el canal que `chat.mjs:86` cerró a propósito: el historial es texto que el lector controla. A cambio, la promesa de privacidad de §8 sigue intacta sin necesidad de reescribirla |
-| Arranque | **Docs primero** | Ninguno |
+| Alcance del temario | **Asistente general** | Se pierde el filtro que mantenía el texto ajeno lejos de Groq; las preguntas fuera de tema ahora cuestan inferencia |
+| Dónde vive el hilo | **En el navegador** | El historial es texto que el lector controla y puede falsificar, incluidos turnos con rol `analyst` |
+| Arranque | Docs primero | Ninguno |
 
-**Lo que NO se negocia y quedó escrito así**: asesoría y ataques al prompt
-siguen contestándose con plantilla determinista sin tocar el proveedor; el guard
-de cifras publicadas se queda intacto; y se agrega uno nuevo
-(`claimsOurMeasurement`) para que una respuesta de tema general no pueda
-disfrazarse de medición nuestra.
+**Lo que no se aflojó**: asesoría y ataques al prompt siguen siendo plantillas
+deterministas que **nunca tocan al proveedor** (6 variantes de ataque probadas,
+cero llegan); el guard de cifras publicadas queda intacto; el hilo entra como
+mensajes con rol propio y jamás dentro del `system`; y `claimsOurMeasurement`
+(nuevo) sustituye cualquier respuesta de tema general que mencione precio,
+pronóstico, confianza o una moneda, o que suelte una cifra. Las respuestas
+generales llevan una línea fija escrita por nosotros —«Esto no sale de lo que
+medimos en LikelyCoin:»— y en pantalla no llevan el ámbar que significa «esto se
+midió».
 
-**Nudo técnico detectado al escribir el contrato**: `estimateChatTokenCost` cobra
-el *tope* del prompt (8,000) y no su tamaño real → ~8.4k por pregunta contra
-30,000/minuto = **3 preguntas por minuto en todo el sitio**. Con plática de verdad
-revienta. El primer paquete de implementación es cobrar bytes reales; hasta que
-eso esté, cualquier prueba de conversación larga choca contra `429`.
+**Verificado en producción** (16:45 CDMX): dos turnos con memoria contra Groq
+real, `degraded:false`. Al preguntar «¿y eso qué tan confiable es?» sin repetir
+contexto, se quedó en Bitcoin **y explicó que una confianza alta todavía no se
+traduce en más acierto** — justo lo que se midió el 29-jul y se decidió publicar.
 
-**Siguiente**: implementar en `feature/analyst-conversation` siguiendo el orden
-de `08_CONVERSACION.md` §9. Branch deploys gratis; un solo merge = 15 créditos,
-con todas las env vars puestas antes (lección que ya costó un deploy extra dos
-veces).
+### Tres bugs que salieron construyéndolo
+
+1. **`recomiend\b` nunca hizo match con nada** — «recomiendas» no tiene frontera
+   de palabra tras el stem. Muerto desde la Fase 4, tapado porque «comprar» sí
+   matcheaba en las mismas frases. De paso, el clasificador de asesoría disparaba
+   con esa palabra sola: pedir una película contestaba «no puedo decirte si debes
+   comprar o vender».
+2. **El chat respondía 403 a su propia página en cualquier preview.** Los
+   orígenes permitidos salían de `URL`/`DEPLOY_URL`/`DEPLOY_PRIME_URL`, que son
+   variables de *build* y no existen en el runtime de Functions. Consecuencia:
+   el chat solo se podía revisar en producción, que es donde no se debe revisar
+   nada por primera vez. Ahora se permite el mismo origen en cualquier contexto.
+3. **La cuota cobraba un byte por token**: ~8,400 por pregunta contra 30,000 por
+   minuto = **3 preguntas por minuto para todo el sitio**, antes de que existiera
+   ningún historial. Dividir entre 3 baja el peor caso a **4,835** y sube a **6
+   concurrentes**; el límite de sesión pasó de 8 a 20.
+
+**Corrección al contrato**: el §7 original proponía cobrar los bytes del prompt
+ya construido. Se implementó así y una prueba existente lo rechazó con razón —
+obliga a leer el snapshot antes de reservar la cuota, y una petición rechazada no
+debe costar trabajo. Se conservó el orden y el documento quedó corregido.
 
 ## Entregado entre el 28-jul y el 5-ago — EN PRODUCCIÓN, sin documentar hasta hoy
 
@@ -257,15 +283,20 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Implementar el Analista conversacional** en `feature/analyst-conversation`,
-en el orden de [`08_CONVERSACION.md`](08_CONVERSACION.md) §9. El paquete 1
-(cobrar bytes reales de tokens en vez del tope, y subir el límite de sesión a 20)
-va primero y no es negociable: sin él, cualquier prueba de plática larga choca
-contra `429` antes de llegar a la tercera pregunta.
+➡️ **Usarlo.** El Analista conversacional está en línea y no requiere acción.
+Lo único que las pruebas no pueden decidir es si la plática **se siente** fluida:
+eso es criterio de Antonio con el sitio abierto.
 
-**Verificar antes de escribir código**: los límites reales del free tier de Groq
-en su consola. `chat-rate-limit.mjs` cita 30k tokens/min y 14,400 req/día; si
-bajaron, todo el §7 de `08_CONVERSACION.md` baja con ellos.
+**Vigilar en los próximos días** (vistazo, sin acción): con temario abierto, toda
+pregunta fuera de tema ahora cuesta inferencia — antes se contestaba con
+plantilla y costaba cero. El tope diario (1,000,000 de tokens estimados ≈ 206
+preguntas de peor caso) es la única red; si llega tráfico real, es lo primero que
+se toca.
+
+**Verificar cuando se vuelva a tocar la cuota**: los límites reales del free tier
+de Groq en su consola. `chat-rate-limit.mjs` cita 30k tokens/min y 14,400
+req/día; si bajaron, el §7 de [`08_CONVERSACION.md`](08_CONVERSACION.md) baja con
+ellos.
 
 **El ciclo de Fase 3 vive** (verificado el 10-ago): `/api/latest` trae
 `accuracy.status: available` con 175 predicciones resueltas por moneda y hit
@@ -275,6 +306,6 @@ rates reales publicados. No requiere acción.
 —hoy es «todo o nada»: si el histórico de una moneda falla, cae el pronóstico de
 las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions.
 
-**Nota de créditos**: la Fase 4 costó **2 deploys (30 créditos)** en vez de 1, porque `CHAT_ENABLED` no se guardó antes del primer merge y hubo que redeployar para encender el flag. Lección: crear TODAS las env vars antes del merge que las necesita.
+**Nota de créditos**: la Fase 4 costó **2 deploys (30 créditos)** en vez de 1, porque `CHAT_ENABLED` no se guardó antes del primer merge y hubo que redeployar para encender el flag. Lección: crear TODAS las env vars antes del merge que las necesita. La expansión a 11 monedas repitió el error por el lado del CI (30 créditos). **El Analista conversacional no lo repitió**: cero env vars nuevas, los commits de documentación viajaron dentro del mismo merge y el fix de CORS entró antes de mergear — **1 deploy, 15 créditos**.
 
 **Recordatorios de presupuesto** (`06_PRESUPUESTO.md`): iterar en `feature/*` (branch deploys gratis), batchear el merge a `main` (cada uno = 15 créditos), pushes solo-docs no construyen. Secrets de Blobs ya existen; el reparto de Fase 4 lo decide Antonio.
