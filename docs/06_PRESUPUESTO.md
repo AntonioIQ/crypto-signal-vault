@@ -7,8 +7,9 @@
 | | |
 |---|---|
 | Cuota | **300 créditos/mes**, límite duro, sin auto-recarga |
-| Ciclo actual | otorgados 30 jun 2026, expiran **31 jul 2026** |
-| Consumo al 16 jul 2026 | 45 créditos (3 production deploys) → **255 restantes** |
+| Ciclo actual | ⚠️ **desactualizado**: la fila decía «otorgados 30 jun, expiran 31 jul 2026». Ese ciclo ya cerró |
+| Consumo | ⚠️ el 45/255 de abajo es del ciclo de julio. **Nadie ha revisado el balance real desde entonces**; hay que verlo en el panel (§5), no estimarlo aquí |
+| Referencia histórica | al 16 jul 2026: 45 créditos (3 production deploys) → 255 restantes |
 | Si se agota | **los proyectos se pausan** (no hay cobro; el sitio deja de servir) |
 
 ## 2. Tarifas (documentación oficial de Netlify)
@@ -32,7 +33,8 @@ CoinGecko (ver §3.6), no hay razón presupuestal para diferirla.
 
 1. **Nada que cambie a diario se commitea al repo.** Un commit a `main` = un deploy = 15 créditos. Un job diario que commitea datos = 30 deploys/mes = **450 créditos contra un presupuesto de 300**. Aritméticamente imposible.
    → **Todo estado mutable vive en Netlify Blobs**, escrito por functions (o por GitHub Actions vía la API de Blobs). El repo solo cambia cuando cambia **código**.
-2. **Los cambios solo-documentación no deben deployar.** El comando `ignore` de `netlify.toml` cancela el build cuando el diff toca únicamente `docs/` y `*.md`. Con `STATUS.md` y `BITACORA.md` actualizándose cada sesión, esta regla sola salva varios deploys al mes.
+2. **Los cambios solo-documentación no deben deployar.** El comando `ignore` de `netlify.toml` cancela el build cuando el diff toca únicamente `docs/`, `*.md`, `.github/`, `ml/`, `tests/` y `scripts/publish-*`. Con `STATUS.md` y `BITACORA.md` actualizándose cada sesión, esta regla sola salva varios deploys al mes.
+   → **Cuidado: la lista razona en carpetas y se le escapan los archivos sueltos de raíz.** Ver §6.
 3. **Batchear.** Varios cambios de código en un solo push a `main`. Un push por commit es un lujo de 15 créditos cada uno.
 4. **Iterar en ramas.** `feature/*` y `dev` producen branch deploys **gratuitos**. Se prueba ahí; a `main` se llega ya verificado.
 5. **Ante la duda, contar deploys.** Antes de proponer un flujo automático, multiplica su frecuencia × 15 créditos × 30 días y compáralo contra 300.
@@ -47,3 +49,33 @@ CoinGecko (ver §3.6), no hay razón presupuestal para diferirla.
 ## 5. Monitoreo
 
 Revisar el [balance de créditos](https://app.netlify.com/teams/antapia3003-i3ib1te/billing/general#credit-balance) al cierre de cada fase. Señal de alarma: consumo >150 créditos a mitad de ciclo, o cualquier línea distinta de «Production deploys» que pase de 5 créditos (significaría que algo dispara requests o bandwidth de más).
+
+## 6. Hoyo conocido en la lista de exclusiones (pendiente, 2026-08-10)
+
+El comando `ignore` excluye **carpetas de trabajo** (`docs/`, `.github/`, `ml/`,
+`tests/`) y **todo `*.md`**. Lo que se le escapa son los **archivos sueltos que no
+son markdown y no pueden afectar al sitio**:
+
+| Archivo | ¿Construye hoy? | ¿Puede cambiar el sitio? |
+|---|---|---|
+| `.claude/agents/*.md` | No — cae en `*.md` | No |
+| `.claude/launch.json` | **Sí, 15 créditos** | No |
+| `.gitignore` | **Sí, 15 créditos** | No |
+| `AGENTS.md`, `README.md` | No — caen en `*.md` | No |
+
+Es decir: agregar un archivo de configuración local de 8 líneas cuesta lo mismo
+que desplegar una fase entera. Y arreglarlo también cuesta, porque el commit que
+edite `.gitignore` o `netlify.toml` tampoco está excluido.
+
+**Decisión (10-ago)**: no gastar un deploy en esto por sí solo. Se arregla
+**batcheado con el próximo cambio de código**, cuando el deploy ya está pagado:
+
+1. Agregar `.claude/launch.json` a `.gitignore` — es config de la máquina de
+   quien desarrolla (ruta de python, puerto del preview), no verdad del proyecto,
+   y se regenera en segundos.
+2. Agregar `':(exclude).claude/'` y `':(exclude).gitignore'` al comando `ignore`
+   de `netlify.toml`, para cerrar el hoyo hacia adelante.
+
+Mientras tanto, `.claude/launch.json` se queda sin trackear: aparece como `??` en
+`git status`, y eso cuesta cero.
+

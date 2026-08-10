@@ -304,7 +304,14 @@ rates reales publicados. No requiere acción.
 
 **Deuda técnica pendiente**: (a) resiliencia por-moneda en el entrenamiento
 —hoy es «todo o nada»: si el histórico de una moneda falla, cae el pronóstico de
-las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions.
+las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions; (c) **hoyo en la lista
+de exclusiones de `netlify.toml`** — `.claude/launch.json` y `.gitignore`
+construyen producción aunque no puedan cambiar el sitio; se arregla batcheado con
+el próximo cambio de código, ver [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md) §6.
+
+**Revisar el balance real de créditos en el panel de Netlify**: las cifras de
+`06_PRESUPUESTO.md` §1 son del ciclo de julio y nadie las ha actualizado desde
+entonces.
 
 **Nota de créditos**: la Fase 4 costó **2 deploys (30 créditos)** en vez de 1, porque `CHAT_ENABLED` no se guardó antes del primer merge y hubo que redeployar para encender el flag. Lección: crear TODAS las env vars antes del merge que las necesita. La expansión a 11 monedas repitió el error por el lado del CI (30 créditos). **El Analista conversacional no lo repitió**: cero env vars nuevas, los commits de documentación viajaron dentro del mismo merge y el fix de CORS entró antes de mergear — **1 deploy, 15 créditos**.
 
