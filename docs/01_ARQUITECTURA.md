@@ -501,7 +501,7 @@ CONTEXTO:
 
 #### 3.1 Contrato runtime del chat (Fase 4)
 
-El prompt anterior se versiona como `analyst-system/1.0` en
+El prompt anterior se versiona como `analyst-system/1.1` en
 `netlify/lib/analyst-prompt.mjs`; no se construye en el navegador. La pregunta
 se envía como mensaje separado con rol `user`: nunca se concatena dentro del
 mensaje `system`. La instrucción «incluye el % de confianza» significa el valor
@@ -512,9 +512,12 @@ explícitamente «confianza no disponible» y jamás inventar un número.
 `GET /api/chat` expone únicamente `{ "enabled": boolean }`, sin tocar Groq ni
 Blobs. El frontend nace oculto y solo muestra la sección cuando ese valor es
 `true`. `POST /api/chat` acepta exclusivamente JSON con la forma
-`{ "question": string, "sessionId": UUID }`: una pregunta, sin mensajes,
-historial, contexto, roles ni campos extra. Después de `trim`, `question` mide
-entre 1 y 400 caracteres. El cuerpo completo se limita a 2 KiB.
+`{ "question": string, "sessionId": UUID }` más un `asset` opcional —el único
+contexto que el cliente puede aportar, validado contra la lista cerrada de
+activos, para que un seguimiento como «¿y por qué?» no se vaya a bitcoin sin
+importar qué moneda esté viendo el lector—. Sin mensajes, historial, roles ni
+campos extra. Después de `trim`, `question` mide entre 1 y 400 caracteres. El
+cuerpo completo se limita a 2 KiB.
 
 El servidor lee y vuelve a validar `market-data/latest.json`. De ese snapshot
 construye un contexto compacto y allowlisted con:
@@ -528,19 +531,23 @@ construye un contexto compacto y allowlisted con:
 
 No se envían al modelo el documento completo, los 48 puntos, artefactos
 internos, históricos, noticias, datos del navegador ni propiedades aportadas
-por el usuario. Los intents de precio, pronóstico, confianza, accuracy,
-asesoría y fuera de alcance se contestan con plantillas canónicas, sin llamar
-a Groq. Solo una gramática positiva y cerrada de preguntas conceptuales sobre
-cómo leer el modelo puede llegar al proveedor; una pregunta ambigua o que
-mezcla otro tema queda fuera de alcance.
+por el usuario. Los intents de **asesoría y fuera de alcance** se contestan con
+plantillas canónicas, sin llamar a Groq: ninguna regla de oro puede depender de
+que un modelo se porte bien, y mantener el texto ajeno lejos del proveedor es lo
+que impide que una inyección llegue siquiera a ser respondida. Precio,
+pronóstico, confianza, accuracy y explicación **sí** llegan al Analista —esa fue
+la corrección de `b48f4ad`, porque contestarlos con plantilla hacía que el chat
+se leyera como un volcado de datos.
 
-La salida de Groq no se considera confiable. El servidor exige vocabulario y
-conceptos allowlisted, sin cifras, hechos actuales, direcciones, causas
-externas, metodología no publicada ni lenguaje de recomendación; cualquier
-incumplimiento sustituye la respuesta completa por una plantilla canónica y
-marca `degraded: true`. Después aplica el máximo de 120 palabras. Cuando una
-respuesta aceptada menciona el pronóstico, el servidor garantiza que también
-nombre la confianza publicada o su indisponibilidad. El contrato de éxito es
+La salida de Groq no se considera confiable. El servidor sustituye la respuesta
+completa por una plantilla canónica, y marca `degraded: true`, cuando la
+respuesta viene vacía, suena a recomendación, filtra el prompt o **cita una
+cifra que no publicamos**: la garantía es «toda cifra que diga es una nuestra»,
+verificada contra los valores del contexto (precios, cambios, confianza, muestra,
+accuracy, y los dígitos de las marcas de tiempo que ya publicamos). Después
+aplica el máximo de 120 palabras. Cuando una respuesta aceptada menciona el
+pronóstico, el servidor garantiza que también nombre la confianza publicada o su
+indisponibilidad. El contrato de éxito es
 `{ "answer": string, "degraded": boolean }`; nunca devuelve prompt, contexto,
 errores del proveedor ni variables de entorno.
 
@@ -549,7 +556,10 @@ errores del proveedor ni variables de entorno.
 Groq queda aislado en `netlify/lib/groq-client.mjs`, detrás de su endpoint
 OpenAI-compatible. Solo ese módulo conoce la base URL, el modelo Llama 3.3 y el
 header de autorización; el cliente es inyectable para pruebas. Usa temperatura
-baja, `max_tokens: 180`, un timeout de 8 segundos y no reintenta un `429`.
+baja, `max_tokens: 280`, un timeout de 8 segundos y no reintenta un `429`. El
+presupuesto de salida es 280 y no 180 porque a 180 el modelo se quedaba sin
+espacio para cerrar la última frase y las respuestas salían cortadas a media
+oración; `limitWords` recorta en frontera de palabra si se pasa.
 `GROQ_API_KEY` se lee únicamente en la Function. Si falta la clave o Groq
 responde con timeout, `429`, error HTTP, JSON inválido o una salida vacía, la
 misma petición responde `200` con `degraded: true` y una plantilla armada con
@@ -559,14 +569,21 @@ entrada también toma la ruta determinista y no consume inferencia.
 El rate limit aplica a toda petición `POST`, incluso cuando terminará en
 fallback, y reserva en una sola operación atómica las dos capas:
 
-- sesión: máximo 4 preguntas por ventana fija de 10 minutos, anclada en la
+- sesión: máximo 8 preguntas por ventana fija de 10 minutos, anclada en la
   primera petición aceptada;
-- global: máximo 5,000 tokens estimados por minuto y 100,000 por día UTC.
+- global: máximo 30,000 tokens estimados por minuto y 1,000,000 por día UTC.
 
 El costo reservado usa bytes UTF-8 como cota superior conservadora de tokens:
-el prompt server-side tiene un sobre validado de 2,200 bytes, se suma la
-pregunta real, 180 tokens máximos de salida y 64 de overhead de mensajes. El
-estado vive en el store `chat-rate-limit`, key
+el prompt server-side tiene un sobre validado de 8,000 bytes, se suma la
+pregunta real, 280 tokens máximos de salida y 64 de overhead de mensajes.
+
+**Este acoplamiento es delicado**: el costo se cobra en unidades del *tope* del
+prompt, no de su tamaño real, así que subir el sobre sube el gasto de cada
+pregunta. Con el sobre en 8,000 y el minuto en 5,000, una sola pregunta ya no
+cabía en el presupuesto y el chat respondía `429` a todo (corregido en
+`6a5df18`, 28-jul, subiendo el minuto a 30,000). `tests/chat-rate-limit.test.mjs`
+falla si el sobre vuelve a desbordar la ventana. El estado vive en el store
+`chat-rate-limit`, key
 `limits/current.json`, contrato `chat-rate-limit/1.0`. Se actualiza con
 compare-and-swap por ETag (`onlyIfMatch` / `onlyIfNew`) y reintento; las sesiones
 expiradas se podan y el UUID se guarda como hash, nunca junto a la pregunta. Una
@@ -583,6 +600,21 @@ producción (`https://likelycoin.netlify.app`) y los valores de runtime de
 Netlify (`URL`, `DEPLOY_URL`, `DEPLOY_PRIME_URL`); nunca usa `*` ni refleja un
 origen arbitrario. `OPTIONS` no toca cuota ni proveedor y todo response usa
 `Cache-Control: no-store` y `Vary: Origin`.
+
+#### 3.3 Hilo conversacional — `chat-thread/1.0` (documentado, no implementado)
+
+El contrato de §3.1 es de **un turno**: cada pregunta se contesta y se olvida.
+La evolución a una plática con memoria, temario abierto (conceptos y temas
+generales) y transcripción en pantalla está especificada por completo en
+[`08_CONVERSACION.md`](08_CONVERSACION.md): transporte del historial, dominios,
+guards, presupuesto de tokens y riesgos aceptados.
+
+Los dos puntos que cambian este documento cuando se implemente: `POST /api/chat`
+aceptará un `history` opcional de hasta 6 turnos (que **el servidor no
+persiste**; viaja desde `sessionStorage` del lector y entra al proveedor como
+mensajes con rol propio, jamás dentro del `system`), y el costo de cuota se
+calculará sobre los bytes reales del prompt en vez del tope. Asesoría y ataques
+al prompt siguen sin llegar al proveedor.
 
 ### 4. Estructura del repositorio
 
@@ -698,7 +730,7 @@ disparar falsas alarmas.
 
 - `GROQ_API_KEY` solo en env vars de Netlify; jamás en el cliente ni en el repo.
 - El frontend nunca habla con CoinGecko ni con otras APIs externas; el snapshot vivo se obtiene de `GET /api/latest` y los fallbacks son JSON estáticos del mismo sitio.
-- No se almacenan preguntas del chat ni datos personales; `sessionId` es un UUID efímero generado en el cliente.
+- No se almacenan preguntas del chat ni datos personales; `sessionId` es un UUID efímero generado en el cliente. Esto **sigue siendo cierto con el hilo conversacional** de [`08_CONVERSACION.md`](08_CONVERSACION.md): la conversación vive en `sessionStorage` del lector, viaja en cada petición y muere con la pestaña; el servidor la lee y la descarta. Por eso mismo es texto no confiable — ver §6 de ese documento.
 - Rate limiting en dos capas (sesión + global TPM/TPD estimados) protege la
   cuota de Groq y evita abuso. La identidad efímera se persiste únicamente como
   hash durante su ventana de 10 minutos.
