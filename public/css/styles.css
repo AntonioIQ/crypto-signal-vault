@@ -1310,7 +1310,8 @@ a {
 }
 
 .analyst-section[hidden],
-.analyst-answer[hidden] {
+.analyst-thread[hidden],
+.analyst-clear[hidden] {
   display: none !important;
 }
 
@@ -1461,20 +1462,85 @@ a {
   color: var(--error);
 }
 
-.analyst-answer {
-  margin-top: 10px;
-  padding: 17px 18px;
+/* The transcript. It scrolls on its own so a long conversation never pushes the
+   input box off the screen — the place the reader is about to type stays put. */
+.analyst-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+  padding-right: 4px;
+}
+
+.analyst-thread[hidden] {
+  display: none;
+}
+
+.analyst-turn {
+  padding: 14px 16px;
+  border-radius: 12px;
+  max-width: 92%;
+}
+
+.analyst-turn-user {
+  align-self: flex-end;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.analyst-turn-analyst {
+  align-self: flex-start;
   border-left: 2px solid var(--analyst);
   border-radius: 0 12px 12px 0;
   background: rgba(241, 197, 106, 0.08);
 }
 
-.analyst-answer p {
+/* An answer about something we did not measure does not get to wear the amber
+   that means "this was measured". It says so in words too; this is so you can
+   see it without reading. */
+.analyst-turn-general {
+  border-left: 2px dashed var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.analyst-turn-who {
+  margin: 0 0 5px;
+  color: var(--muted);
+  font-size: 0.63rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.analyst-turn-text {
   margin: 0;
   color: #e8e5dd;
   font-size: 0.9rem;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.analyst-clear {
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 7px 13px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.analyst-clear:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #e8e5dd;
+}
+
+.analyst-clear[hidden] {
+  display: none;
 }
 
 .system-section {

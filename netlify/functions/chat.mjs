@@ -11,6 +11,7 @@ import {
   MAX_ANALYST_SYSTEM_PROMPT_BYTES,
   buildAnalystSystemPrompt,
 } from "../lib/analyst-prompt.mjs";
+import { glossaryMatches, serializeGlossary } from "../lib/analyst-glossary.mjs";
 import {
   CHAT_RATE_LIMIT_STORE,
   estimateChatTokenCost,
@@ -25,7 +26,13 @@ import { createSeedSnapshot } from "../lib/market-contract.mjs";
 import { readLatestSnapshot } from "./latest.mjs";
 
 export const MAX_QUESTION_CHARACTERS = 400;
-export const MAX_REQUEST_BYTES = 2_048;
+// The body now carries the conversation, so it needs room for it: six turns of
+// up to 600 characters plus the question. The history itself has its own,
+// tighter envelope below.
+export const MAX_REQUEST_BYTES = 6_144;
+export const MAX_HISTORY_TURNS = 6;
+export const MAX_HISTORY_TURN_CHARACTERS = 600;
+export const MAX_HISTORY_BYTES = 3_072;
 export const PRODUCTION_ORIGIN = "https://likelycoin.netlify.app";
 
 const UUID_V4_PATTERN =
@@ -83,16 +90,53 @@ function errorResponse(code, message, options = {}) {
   return jsonResponse({ error: { code, message } }, options);
 }
 
+function historyByteLength(history) {
+  return new TextEncoder().encode(history.map((turn) => turn.text).join("\n")).byteLength;
+}
+
+// The conversation the reader's browser is holding. It is validated for shape
+// and size only — its *content* cannot be validated, because a modified client
+// can put anything here, including turns the analyst never said. That is the
+// accepted cost of keeping the thread out of our storage (docs/08_CONVERSACION.md
+// §2). What contains it is downstream: the thread is sent as messages with their
+// own roles, never inside the system block, and every answer still goes through
+// the output guards.
+export function validateChatHistory(value) {
+  if (!Array.isArray(value)) throw new TypeError("Invalid history.");
+  const turns = value.map((turn) => {
+    if (!exactKeys(turn, ["role", "text"])) throw new TypeError("Invalid history turn.");
+    if (turn.role !== "user" && turn.role !== "analyst") {
+      throw new TypeError("Invalid history role.");
+    }
+    if (typeof turn.text !== "string") throw new TypeError("Invalid history text.");
+    const text = turn.text.trim();
+    const characters = [...text].length;
+    if (characters < 1 || characters > MAX_HISTORY_TURN_CHARACTERS) {
+      throw new TypeError("Invalid history length.");
+    }
+    return { role: turn.role, text };
+  });
+
+  // A malformed thread is a bug in our client and fails loudly; a long one is
+  // the product working as intended, so it is trimmed to the newest turns
+  // instead of rejected.
+  let kept = turns.slice(-MAX_HISTORY_TURNS);
+  while (kept.length > 0 && historyByteLength(kept) > MAX_HISTORY_BYTES) {
+    kept = kept.slice(1);
+  }
+  return kept;
+}
+
 export function validateChatPayload(payload) {
-  // `asset` is optional and is the only context the client may supply: which
-  // coin the page is showing. Free-form history stays rejected — it would be a
-  // channel for injecting text straight into the prompt — but without any
-  // context at all a follow-up like "¿y por qué?" silently answered about
-  // bitcoin no matter what the reader was looking at. One value from a closed
-  // set carries no such risk.
-  const shape = exactKeys(payload, ["question", "sessionId"])
-    || exactKeys(payload, ["question", "sessionId", "asset"]);
-  if (!shape) {
+  // `asset` says which coin the page is showing; `history` carries the
+  // conversation so far. Anything else is rejected.
+  if (!isRecord(payload)) throw new TypeError("Invalid request shape.");
+  const allowed = new Set(["question", "sessionId", "asset", "history"]);
+  const keys = Object.keys(payload);
+  if (!keys.includes("question") || !keys.includes("sessionId")) {
+    throw new TypeError("Invalid request shape.");
+  }
+  if (keys.some((key) => !allowed.has(key))) {
     throw new TypeError("Invalid request shape.");
   }
   if (typeof payload.question !== "string" || typeof payload.sessionId !== "string") {
@@ -113,6 +157,9 @@ export function validateChatPayload(payload) {
     }
     validated.asset = payload.asset;
   }
+  validated.history = Object.hasOwn(payload, "history")
+    ? validateChatHistory(payload.history)
+    : [];
   return validated;
 }
 
@@ -217,14 +264,21 @@ export function createChatHandler(dependencies = {}) {
       );
     }
 
+    // Quota is reserved before any other work, so a refused request costs
+    // nothing beyond the reservation itself — no snapshot read, no provider
+    // call. The price is the prompt envelope plus the conversation this request
+    // actually carries; the envelope is charged rather than the built prompt
+    // precisely so that nothing has to be built to know the price.
     let quota;
     try {
       const store = getStoreFn(CHAT_RATE_LIMIT_STORE);
       quota = await reserveQuotaFn({
         store,
         sessionId: input.sessionId,
-        tokenCost: estimateChatTokenCost(input.question, {
-          maxSystemPromptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+        tokenCost: estimateChatTokenCost({
+          promptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+          historyBytes: historyByteLength(input.history),
+          question: input.question,
           maxOutputTokens: GROQ_MAX_OUTPUT_TOKENS,
         }),
         now: nowFn(),
@@ -232,7 +286,7 @@ export function createChatHandler(dependencies = {}) {
     } catch {
       const context = await safeContext(readSnapshotFn);
       return jsonResponse(
-        { answer: templateAnswer(input.question, context), degraded: true },
+        { answer: templateAnswer(input.question, context, undefined, input.asset), degraded: true },
         { origin },
       );
     }
@@ -252,16 +306,12 @@ export function createChatHandler(dependencies = {}) {
     const context = await safeContext(readSnapshotFn);
     const intent = classifyAnalystQuestion(input.question, input.asset);
 
-    // Only questions about our own data reach the analyst. Refusing investment
-    // advice, and refusing anything off-topic, are answered by fixed templates:
-    // neither may depend on a model behaving itself, and keeping out-of-scope
-    // text away from the provider is what stops a prompt injection from ever
-    // being answered. Everything else — price, forecast, confidence, accuracy,
-    // explanations — now goes to the analyst instead of a canned string, which
-    // is what made the chat read like a data dump.
-    // finalizeAnalystResponse still swaps the template back in if the reply
-    // drifts off the context, leaks the prompt or drops the published confidence.
-    if (intent === ANALYST_INTENTS.ADVICE || intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
+    // Investment advice and attempts to steer the analyst off its instructions
+    // are answered by fixed templates and never reach the provider: neither may
+    // depend on a model behaving itself. Everything else — our data, concepts,
+    // and now any other subject — goes to the analyst, and comes back through
+    // the guards in finalizeAnalystResponse.
+    if (intent === ANALYST_INTENTS.ADVICE || intent === ANALYST_INTENTS.PROMPT_ATTACK) {
       return jsonResponse(
         {
           answer: templateAnswer(input.question, context, intent, input.asset),
@@ -271,11 +321,30 @@ export function createChatHandler(dependencies = {}) {
       );
     }
 
+    let systemPrompt;
     try {
-      const systemPrompt = buildAnalystSystemPrompt(context, input.asset);
+      systemPrompt = buildAnalystSystemPrompt(context, input.asset, {
+        glossary: intent === ANALYST_INTENTS.CONCEPT
+          ? serializeGlossary(glossaryMatches(input.question))
+          : "",
+      });
+    } catch {
+      // Over its byte envelope: answer deterministically rather than send a
+      // prompt nobody bounded.
+      return jsonResponse(
+        {
+          answer: templateAnswer(input.question, context, intent, input.asset),
+          degraded: true,
+        },
+        { origin },
+      );
+    }
+
+    try {
       const rawAnswer = await completeFn({
         systemPrompt,
         question: input.question,
+        history: input.history,
       });
       const result = finalizeAnalystResponse(rawAnswer, {
         question: input.question,

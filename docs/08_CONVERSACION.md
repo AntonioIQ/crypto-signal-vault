@@ -1,8 +1,12 @@
 # 08 — El Analista conversacional (hilo con memoria)
 
-> Decisión de Antonio, 2026-08-10. Este documento es el **contrato**; se escribe
-> antes del código, como manda `CLAUDE.md`. Nada de lo que sigue está
-> implementado todavía.
+> Decisión de Antonio, 2026-08-10. Este documento es el **contrato**; se escribió
+> antes del código, como manda `CLAUDE.md`, y se corrigió después con lo que la
+> implementación enseñó (§4.2 y §7).
+>
+> **Estado**: implementado en `feature/analyst-conversation`, 165 pruebas Node +
+> 61 Python en verde. **Sin merge y sin deploy**: producción sigue con el chat de
+> un turno.
 
 ## 1. Qué cambia y por qué
 
@@ -106,6 +110,27 @@ reconoce. Lo que **no** desaparece es el rechazo de asesoría ni el de ataques a
 prompt: esos dos siguen siendo plantillas fijas que nunca llegan al proveedor,
 porque ninguna regla de oro puede depender de que un modelo se porte bien.
 
+### 4.2 Dos afinaciones que salieron al construirlo
+
+**El clasificador de asesoría se parte en dos.** Disparaba con la sola palabra
+«recomiendas», así que «¿me recomiendas una película?» contestaba «no puedo
+decirte si debes comprar o vender»: inútil y un poco absurdo. Ahora los verbos
+transaccionales (comprar, vender, invertir, entrar, posición, cartera) son
+asesoría **siempre**, y las palabras de recomendación solo lo son cuando el tema
+es dinero —o cuando hay una moneda en pantalla—. La regla de oro #1 no se afloja;
+deja de atrapar preguntas que no tienen nada que ver.
+
+Al hacerlo apareció un bug latente: escrito como `recomiend\b`, el patrón nunca
+disparaba, porque «recomiendas» no tiene frontera de palabra después del stem.
+Llevaba ahí desde la Fase 4, tapado por el verbo «comprar» que sí matcheaba en
+las mismas frases.
+
+**El patrón de ataque al prompt se estrecha.** El anterior atrapaba «sistema» y
+«clave» sueltas, lo que en un chat que ahora habla de cualquier cosa rechaza
+preguntas honestas («¿qué es el sistema financiero?»). Quedan solo las frases que
+únicamente existen para mover al Analista de sus instrucciones. Las seis
+variantes de ataque están probadas y ninguna llega al proveedor.
+
 ### 4.1 El glosario
 
 `netlify/lib/analyst-glossary.mjs`: un mapa de término → definición corta, en
@@ -199,18 +224,33 @@ preguntas por minuto en todo el sitio**. Agregarle 3 KiB de hilo lo dejaría en 
 Es el mismo acoplamiento que ya tumbó el chat una vez con `429` en todo
 (`6a5df18`, 28-jul). Con plática de verdad, reventaría otra vez.
 
-**Cambio**: el costo se calcula sobre los **bytes reales** del prompt construido
-(system + glosario + hilo + pregunta), no sobre el tope. Sigue siendo una cota
-superior honesta —un token nunca codifica menos de un byte— pero deja de cobrar
-espacio vacío. Una pregunta típica pasa de ~8.4k a ~2–3k.
+**Cambio aplicado**: la conversión de bytes a tokens. Un token nunca codifica
+menos de un byte, pero en español y en este JSON la razón real ronda 4 bytes por
+token; cobrar 1:1 era una cota superior ruinosa. Ahora se divide entre
+`CHAT_BYTES_PER_TOKEN = 3`, que conserva margen amplio sin cobrar aire. El hilo
+se suma al costo: una plática larga no viaja gratis.
 
-| Límite | Hoy | Propuesto |
+**Lo que NO cambió, y por qué**: la primera versión de este documento proponía
+cobrar los bytes del prompt *ya construido*. Eso obliga a leer el snapshot y
+armar el prompt **antes** de reservar la cuota, y rompe una propiedad deliberada
+del diseño —una petición rechazada no debe costar trabajo— que
+`tests/chat-function.test.mjs` verifica explícitamente. Se conserva el orden
+original: cuota primero, todo lo demás después. El precio se cobra sobre el sobre
+del prompt (que no hay que construir para conocer) más los bytes reales del hilo
+y de la pregunta.
+
+| Límite | Antes | Ahora |
 |---|---|---|
 | Preguntas por sesión / 10 min | 8 | **20** (una plática son muchos turnos) |
 | Tokens estimados / minuto | 30,000 | 30,000 (sin cambio) |
 | Tokens estimados / día UTC | 1,000,000 | 1,000,000 (sin cambio) |
+| Costo del peor caso | ~8,400 | **4,835** |
+| Preguntas concurrentes / minuto | 3 | **6** |
 
-Con el costo real, 30k/min pasan de 3 preguntas a ~10–12 concurrentes.
+Medido, no estimado: peor caso 4,835 tokens (sobre de 10 KB + hilo de 3 KiB +
+pregunta de 400 + 280 de salida + 64 de overhead) contra 30,000 por minuto. El
+límite de sesión sigue siendo lo primero que topa un solo lector, y el tope
+diario permite 206 preguntas de peor caso.
 
 **Verificar antes de implementar**: los límites del free tier de Groq que cita
 `chat-rate-limit.mjs` (30k tokens/min, 14,400 req/día) hay que confirmarlos en la

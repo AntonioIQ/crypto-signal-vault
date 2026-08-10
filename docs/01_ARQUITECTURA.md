@@ -601,7 +601,7 @@ Netlify (`URL`, `DEPLOY_URL`, `DEPLOY_PRIME_URL`); nunca usa `*` ni refleja un
 origen arbitrario. `OPTIONS` no toca cuota ni proveedor y todo response usa
 `Cache-Control: no-store` y `Vary: Origin`.
 
-#### 3.3 Hilo conversacional — `chat-thread/1.0` (documentado, no implementado)
+#### 3.3 Hilo conversacional — `chat-thread/1.0` (construido, sin merge)
 
 El contrato de §3.1 es de **un turno**: cada pregunta se contesta y se olvida.
 La evolución a una plática con memoria, temario abierto (conceptos y temas
@@ -609,12 +609,19 @@ generales) y transcripción en pantalla está especificada por completo en
 [`08_CONVERSACION.md`](08_CONVERSACION.md): transporte del historial, dominios,
 guards, presupuesto de tokens y riesgos aceptados.
 
-Los dos puntos que cambian este documento cuando se implemente: `POST /api/chat`
-aceptará un `history` opcional de hasta 6 turnos (que **el servidor no
-persiste**; viaja desde `sessionStorage` del lector y entra al proveedor como
-mensajes con rol propio, jamás dentro del `system`), y el costo de cuota se
-calculará sobre los bytes reales del prompt en vez del tope. Asesoría y ataques
-al prompt siguen sin llegar al proveedor.
+Los dos puntos que cambian este documento al mergear: `POST /api/chat` acepta un
+`history` opcional de hasta 6 turnos y 3 KiB (que **el servidor no persiste**;
+viaja desde `sessionStorage` del lector y entra al proveedor como mensajes con
+rol propio, jamás dentro del `system`), y el costo de cuota divide los bytes
+entre 3 en vez de cobrar uno por token —el peor caso baja de ~8,400 a 4,835, de 3
+a 6 preguntas por minuto para todo el sitio—. El cuerpo sube de 2 KiB a 6 KiB y
+el límite de sesión de 8 a 20 preguntas por ventana.
+
+**El orden se conserva**: la cuota se reserva antes de leer el snapshot o armar
+el prompt, así que una petición rechazada no cuesta trabajo. Asesoría y ataques
+al prompt siguen sin llegar al proveedor; lo que sí llega ahora son los temas
+generales, con un guard nuevo que impide que esa respuesta se presente como una
+medición nuestra.
 
 ### 4. Estructura del repositorio
 

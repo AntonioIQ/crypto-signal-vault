@@ -23,7 +23,14 @@ export function createGroqClient({
   timeoutMs = GROQ_TIMEOUT_MS,
 } = {}) {
   return {
-    async complete({ systemPrompt, question }) {
+    // `history` is the reader's own conversation, and it is NOT trusted: a
+    // modified client can send turns that never happened, including `analyst`
+    // turns the analyst never said. It is passed as messages with their own
+    // roles precisely so it cannot rewrite the system block by position —
+    // whatever it contains, the instructions stay in their own message and the
+    // output guards still run afterwards. It is never concatenated into
+    // systemPrompt.
+    async complete({ systemPrompt, question, history = [] }) {
       if (typeof apiKey !== "string" || apiKey.length === 0) {
         throw new GroqClientError("missing_key");
       }
@@ -54,6 +61,10 @@ export function createGroqClient({
             max_tokens: GROQ_MAX_OUTPUT_TOKENS,
             messages: [
               { role: "system", content: systemPrompt },
+              ...history.map((turn) => ({
+                role: turn.role === "analyst" ? "assistant" : "user",
+                content: turn.text,
+              })),
               { role: "user", content: question },
             ],
           }),
