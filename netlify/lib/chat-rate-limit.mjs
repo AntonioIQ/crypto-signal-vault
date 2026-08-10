@@ -6,17 +6,24 @@ export const CHAT_RATE_LIMIT_STORE = "chat-rate-limit";
 export const CHAT_RATE_LIMIT_KEY = "limits/current.json";
 export const CHAT_RATE_LIMIT_SCHEMA_VERSION = "chat-rate-limit/1.0";
 export const SESSION_WINDOW_MS = 10 * 60 * 1_000;
-export const SESSION_REQUEST_LIMIT = 8;
-// These budgets are spent in units of estimateChatTokenCost, which counts the
-// system-prompt byte cap as if every byte were a token — a deliberate upper
-// bound, roughly 4x the real usage. They must therefore be sized against that
-// worst case, not against real token counts: the per-minute budget has to fit
-// several whole requests, or the first caller of every minute is refused.
+// A conversation is many short turns, not a handful of standalone questions.
+// At 8 per window a real back-and-forth hit the wall around the third follow-up.
+export const SESSION_REQUEST_LIMIT = 20;
+// These budgets are spent in units of estimateChatTokenCost.
 // Reference point: the Groq free tier allows 30k tokens/min and 14,400
-// requests/day, so these stay well inside it.
+// requests/day, so these stay well inside it. Re-check them in the Groq console
+// before raising anything here — they are their numbers, not ours.
 export const GLOBAL_TOKENS_PER_MINUTE = 30_000;
 export const GLOBAL_TOKENS_PER_DAY = 1_000_000;
 export const CHAT_MESSAGE_OVERHEAD_TOKENS = 64;
+// UTF-8 bytes per token. Counting every byte as a token was a true upper bound
+// but a ruinous one: with the 11-coin prompt it priced a single question at
+// ~8.4k against a 30k minute, which is three questions per minute for the whole
+// site — before any conversation history existed. Spanish prose and this JSON
+// context both sit near 4 bytes per token, so 3 keeps a wide margin without
+// charging for air. It is a calibrated estimate, not a hard ceiling; the daily
+// budget is what backstops a bad estimate.
+export const CHAT_BYTES_PER_TOKEN = 3;
 
 function isRecord(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -84,22 +91,31 @@ export function sessionHash(sessionId) {
   return createHash("sha256").update(sessionId).digest("hex");
 }
 
-export function estimateChatTokenCost(question, {
-  maxSystemPromptBytes,
+// The cost is now measured against the prompt that was actually built — system
+// block, conversation history and question — rather than against the cap the
+// prompt was allowed to reach. Charging the cap meant that widening the envelope
+// (for more coins, or for a glossary) silently raised the price of every single
+// question until none of them fit in a minute.
+export function estimateChatTokenCost({
+  promptBytes,
+  historyBytes = 0,
+  question,
   maxOutputTokens,
 }) {
   if (
     typeof question !== "string" ||
-    !Number.isInteger(maxSystemPromptBytes) || maxSystemPromptBytes <= 0 ||
-    !Number.isInteger(maxOutputTokens) || maxOutputTokens <= 0
+    !Number.isInteger(promptBytes) || promptBytes < 0 ||
+    !Number.isInteger(historyBytes) || historyBytes < 0 ||
+    !Number.isInteger(maxOutputTokens) || maxOutputTokens < 0
   ) {
-    throw new TypeError("A bounded prompt and output budget are required.");
+    throw new TypeError("A measured prompt and output budget are required.");
   }
-  // One token cannot encode less than one byte, so UTF-8 bytes are a safe
-  // upper bound for input tokens even for emoji and CJK text. The system
-  // prompt builder independently enforces maxSystemPromptBytes at runtime.
   const questionBytes = new TextEncoder().encode(question).byteLength;
-  return maxSystemPromptBytes + questionBytes + maxOutputTokens + CHAT_MESSAGE_OVERHEAD_TOKENS;
+  const inputBytes = promptBytes + historyBytes + questionBytes;
+  const inputTokens = Math.ceil(inputBytes / CHAT_BYTES_PER_TOKEN);
+  const total = inputTokens + maxOutputTokens + CHAT_MESSAGE_OVERHEAD_TOKENS;
+  if (total <= 0) throw new TypeError("A chat request always costs something.");
+  return total;
 }
 
 function normalizedState(current, nowMs) {

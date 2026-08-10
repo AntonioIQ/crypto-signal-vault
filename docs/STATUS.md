@@ -2,11 +2,87 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-07-27 14:00 (hora CDMX)
+**Última actualización**: 2026-08-10 13:00 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — 11 MONEDAS EN PRODUCCIÓN ✅ (2026-07-27); Fases 1–4 + visual cerradas
+## Fase activa: Analista conversacional — CONTRATO ESCRITO, sin código (2026-08-10)
+
+Antonio decidió el 10-ago que el siguiente paso es **convertir el chat de una
+pregunta suelta en una plática con memoria**: que recuerde el hilo, conteste
+preguntas de temas variados y de conceptos, y vuelva a las monedas sin repetir
+contexto. El contrato completo quedó en [`08_CONVERSACION.md`](08_CONVERSACION.md)
+**antes de tocar código**, como manda la regla del proyecto.
+
+**Decisiones de Antonio** (las dos primeras contra mi recomendación, tomadas con
+el trade-off explícito sobre la mesa):
+
+| Decisión | Elegido | Costo asumido |
+|---|---|---|
+| Alcance del temario | **Asistente general** — responde de cualquier tema y vuelve a cripto | Se pierde el filtro que hoy mantiene el texto ajeno lejos de Groq; todas las preguntas fuera de tema pasan a costar inferencia |
+| Dónde vive el hilo | **En el navegador**, validado al llegar | Reabre el canal que `chat.mjs:86` cerró a propósito: el historial es texto que el lector controla. A cambio, la promesa de privacidad de §8 sigue intacta sin necesidad de reescribirla |
+| Arranque | **Docs primero** | Ninguno |
+
+**Lo que NO se negocia y quedó escrito así**: asesoría y ataques al prompt
+siguen contestándose con plantilla determinista sin tocar el proveedor; el guard
+de cifras publicadas se queda intacto; y se agrega uno nuevo
+(`claimsOurMeasurement`) para que una respuesta de tema general no pueda
+disfrazarse de medición nuestra.
+
+**Nudo técnico detectado al escribir el contrato**: `estimateChatTokenCost` cobra
+el *tope* del prompt (8,000) y no su tamaño real → ~8.4k por pregunta contra
+30,000/minuto = **3 preguntas por minuto en todo el sitio**. Con plática de verdad
+revienta. El primer paquete de implementación es cobrar bytes reales; hasta que
+eso esté, cualquier prueba de conversación larga choca contra `429`.
+
+**Siguiente**: implementar en `feature/analyst-conversation` siguiendo el orden
+de `08_CONVERSACION.md` §9. Branch deploys gratis; un solo merge = 15 créditos,
+con todas las env vars puestas antes (lección que ya costó un deploy extra dos
+veces).
+
+## Entregado entre el 28-jul y el 5-ago — EN PRODUCCIÓN, sin documentar hasta hoy
+
+Catorce commits llegaron a `main` sin que STATUS ni BITÁCORA se actualizaran. Se
+registran aquí; el detalle narrativo va en `BITACORA.md`.
+
+**Honestidad medida (ml)** — el bloque más importante del periodo:
+
+- `ac03d99` publica el hit rate medido **junto a los baselines que debe ganarle**;
+  `fe99510` agrega el tamaño del error, no solo la dirección; `4fec824` deja de
+  publicar una magnitud que era peor que no decir nada; `b62ed10` mide si la
+  confianza publicada significa algo — **y la respuesta fue que no**: una
+  confianza alta no ha correspondido a acertar más, y el prompt del Analista ya
+  lo dice con esas palabras (`analyst-prompt.mjs`, regla 4).
+- `036ff52` agrega `ml/tune_priors.py`: el changepoint prior de Prophet se elige
+  midiendo, ya no se hereda.
+- `576ff2a` valida sobre 90 días con orígenes repartidos por la ventana;
+  `127c6b6` deja de fijar `--validation-origins` en el workflow.
+
+**El chat** — `b48f4ad` le permite responder con sus propias palabras en vez de
+plantillas; `ac8e8f5`, `35a25c0`, `0f7fae1` y `75513ae` corrigen que no conocía
+9 de las 11 monedas, que repetía la confianza, que respondía de la moneda
+equivocada y que ignoraba la que el lector tenía en pantalla. `978022c` (5-ago,
+reportado por Antonio desde el teléfono) arregla que **cualquier pregunta sobre
+cuándo se midió algo era irrespondible**: el guard de cifras rechazaba las fechas
+por estar hechas de dígitos.
+
+**Rate limit** — `6a5df18` (28-jul): el chat respondía `429` a **todas** las
+preguntas porque una sola ya no cabía en el presupuesto por minuto. Ver el nudo
+descrito arriba; es el mismo acoplamiento.
+
+**UI** — `abf7654` implementa el design handoff 2b (paleta semántica, ticker de
+mercado, pronóstico por moneda); `1c336eb` agrega micro-animaciones de precio;
+`289acfe` publica el panel de auto-medición **incluyendo lo malo**; `325efd4`
+baja el peso de los logos del footer.
+
+**Lo que eso publicó, medido hoy en producción** (`/api/latest`, muestra de 175
+predicciones resueltas por moneda): 7 de 11 monedas por debajo de 50 % de
+acierto — ADA 23.4 %, BNB 32.6 %, LINK 33.1 %, SOL 36.6 %, BTC 40 %, DOGE 41.1 %,
+ETH 49.7 %; arriba TRX 54.3 %, CHEEMS 54.9 %, XRP 56 %, HYPE 64.6 %. **Está en
+pantalla a propósito.** Es exactamente lo que la regla de oro #3 pide y lo que el
+commit `289acfe` decidió no esconder.
+
+## 11 MONEDAS EN PRODUCCIÓN ✅ (2026-07-27); Fases 1–4 + visual cerradas
 
 ### 11 monedas (BTC, ETH, BNB, XRP, SOL, TRX, DOGE, ADA, LINK, HYPE, Cheems) — EN PRODUCCIÓN
 
@@ -181,9 +257,23 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Fases 1–4 cerradas; el producto del roadmap original está completo y en línea.** No hay una Fase 5 obligatoria. Opciones si se quiere seguir: (a) **dejar reposar** — el ciclo de Fase 3 sigue acumulando accuracy real (~48 h para el primer porcentaje) y no requiere acción; (b) **Fase 5 de pulido/portafolio** (`05_PLAN_EJECUCION.md`): README con badges, `/status.html`, caso de estudio escrito; (c) **saldar deuda técnica**: actions v4 fuerzan Node 24 en GitHub Actions.
+➡️ **Implementar el Analista conversacional** en `feature/analyst-conversation`,
+en el orden de [`08_CONVERSACION.md`](08_CONVERSACION.md) §9. El paquete 1
+(cobrar bytes reales de tokens en vez del tope, y subir el límite de sesión a 20)
+va primero y no es negociable: sin él, cualquier prueba de plática larga choca
+contra `429` antes de llegar a la tercera pregunta.
 
-**Verificación de que el ciclo de Fase 3 vive** (vistazo, sin acción): `/api/latest` debe traer `accuracy.status: available`; tras ~48 h, algún activo debe pasar a `hit_rate` con `sample_size ≥ 20`. Si no crece, revisar que `predict` esté registrando (store `predictions`).
+**Verificar antes de escribir código**: los límites reales del free tier de Groq
+en su consola. `chat-rate-limit.mjs` cita 30k tokens/min y 14,400 req/día; si
+bajaron, todo el §7 de `08_CONVERSACION.md` baja con ellos.
+
+**El ciclo de Fase 3 vive** (verificado el 10-ago): `/api/latest` trae
+`accuracy.status: available` con 175 predicciones resueltas por moneda y hit
+rates reales publicados. No requiere acción.
+
+**Deuda técnica pendiente**: (a) resiliencia por-moneda en el entrenamiento
+—hoy es «todo o nada»: si el histórico de una moneda falla, cae el pronóstico de
+las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions.
 
 **Nota de créditos**: la Fase 4 costó **2 deploys (30 créditos)** en vez de 1, porque `CHAT_ENABLED` no se guardó antes del primer merge y hubo que redeployar para encender el flag. Lección: crear TODAS las env vars antes del merge que las necesita.
 

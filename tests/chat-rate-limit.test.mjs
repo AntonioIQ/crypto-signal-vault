@@ -137,17 +137,62 @@ test("corrupt state and storage outage fail closed", async () => {
 });
 
 test("token reservation is tied to the bounded system prompt, UTF-8 question, and output", () => {
-  const ascii = estimateChatTokenCost("a".repeat(400), {
-    maxSystemPromptBytes: 2_200,
+  const ascii = estimateChatTokenCost({
+    promptBytes: 2_200,
+    question: "a".repeat(400),
     maxOutputTokens: 180,
   });
-  const emoji = estimateChatTokenCost("🔒".repeat(400), {
-    maxSystemPromptBytes: 2_200,
+  const emoji = estimateChatTokenCost({
+    promptBytes: 2_200,
+    question: "🔒".repeat(400),
     maxOutputTokens: 180,
   });
-  assert.equal(ascii, 2_844);
-  assert.equal(emoji, 4_044);
-  assert.ok(emoji > ascii);
+  // 2,600 and 3,800 input bytes at 3 bytes per token, plus output and overhead.
+  assert.equal(ascii, 1_111);
+  assert.equal(emoji, 1_511);
+  assert.ok(emoji > ascii, "multi-byte questions must still cost more");
+});
+
+// The conversation is charged: a long thread is not a free ride on the budget
+// that a single question pays for.
+test("conversation history is part of what a question costs", () => {
+  const alone = estimateChatTokenCost({
+    promptBytes: 2_200,
+    question: "¿y por qué?",
+    maxOutputTokens: 180,
+  });
+  const withThread = estimateChatTokenCost({
+    promptBytes: 2_200,
+    historyBytes: 3_000,
+    question: "¿y por qué?",
+    maxOutputTokens: 180,
+  });
+  assert.ok(withThread > alone);
+  assert.equal(withThread - alone, Math.ceil(3_000 / 3));
+});
+
+test("the estimator refuses inputs it cannot bound", () => {
+  assert.throws(() => estimateChatTokenCost({
+    promptBytes: 2_200,
+    question: "hola",
+    maxOutputTokens: 1.5,
+  }));
+  assert.throws(() => estimateChatTokenCost({
+    promptBytes: -1,
+    question: "hola",
+    maxOutputTokens: 180,
+  }));
+  assert.throws(() => estimateChatTokenCost({
+    promptBytes: 2_200,
+    historyBytes: -1,
+    question: "hola",
+    maxOutputTokens: 180,
+  }));
+  assert.throws(() => estimateChatTokenCost({
+    promptBytes: 2_200,
+    question: null,
+    maxOutputTokens: 180,
+  }));
 });
 
 // Concurrency here is about compare-and-swap losing no update, so it stays
@@ -196,11 +241,21 @@ test("a single worst-case question fits inside the global budgets", async () => 
     SESSION_REQUEST_LIMIT,
   } = await import("../netlify/lib/chat-rate-limit.mjs");
 
-  const worstCase = estimateChatTokenCost("x".repeat(400), {
-    maxSystemPromptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+  const { MAX_HISTORY_BYTES } = await import("../netlify/functions/chat.mjs");
+  const worstCase = estimateChatTokenCost({
+    promptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+    historyBytes: MAX_HISTORY_BYTES,
+    question: "x".repeat(400),
     maxOutputTokens: GROQ_MAX_OUTPUT_TOKENS,
   });
 
+  // A conversation is several questions in a row, so one of them must not eat a
+  // meaningful slice of the minute: at three per minute the chat is unusable for
+  // two readers at once, which is what charging one byte per token produced.
+  assert.ok(
+    GLOBAL_TOKENS_PER_MINUTE / worstCase >= 5,
+    `only ${Math.floor(GLOBAL_TOKENS_PER_MINUTE / worstCase)} concurrent questions fit in a minute`,
+  );
   assert.ok(
     worstCase <= GLOBAL_TOKENS_PER_MINUTE,
     `one question costs ${worstCase} tokens but the minute budget is ${GLOBAL_TOKENS_PER_MINUTE}: every request would be refused`,
@@ -226,8 +281,9 @@ test("a fresh session is served rather than refused on its first question", asyn
   const decision = await reserveChatQuota({
     store,
     sessionId: SESSION_A,
-    tokenCost: estimateChatTokenCost("¿Qué espera el modelo?", {
-      maxSystemPromptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+    tokenCost: estimateChatTokenCost({
+      promptBytes: MAX_ANALYST_SYSTEM_PROMPT_BYTES,
+      question: "¿Qué espera el modelo?",
       maxOutputTokens: GROQ_MAX_OUTPUT_TOKENS,
     }),
     now: NOW,

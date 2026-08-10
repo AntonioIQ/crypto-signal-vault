@@ -178,7 +178,7 @@
         <div class="analyst-intro">
           <p class="section-label analyst-label">LECTURA DEL MODELO</p>
           <h2 id="analyst-title">Pregúntale a tu analista</h2>
-          <p>Consulta el precio, el pronóstico actual o la precisión que ya medimos. Las respuestas usan únicamente los datos visibles de LikelyCoin.</p>
+          <p>Pregunta por el precio, el pronóstico o la precisión que ya medimos, y sigue la plática desde ahí. También responde de otros temas, y cuando lo haga te lo dirá: los números solo salen de lo que medimos aquí.</p>
 
           <div class="quick-questions" role="group" aria-label="Preguntas rápidas">
             <button type="button" data-question="¿Qué espera el modelo en las próximas 48 horas?">¿Qué espera en 48 horas?</button>
@@ -190,6 +190,16 @@
         </div>
 
         <div class="analyst-conversation">
+          <div
+            id="analyst-thread"
+            class="analyst-thread"
+            role="log"
+            aria-live="polite"
+            aria-label="Conversación con el analista"
+            tabindex="-1"
+            hidden
+          ></div>
+
           <form id="analyst-form" novalidate>
             <label for="analyst-question">Tu pregunta</label>
             <textarea
@@ -202,16 +212,14 @@
               placeholder="Ejemplo: ¿qué significa la confianza de esta lectura?"
             ></textarea>
             <div class="analyst-form-meta">
-              <span id="analyst-help">Una pregunta por vez</span>
+              <span id="analyst-help">Recuerda la conversación mientras la pestaña siga abierta</span>
               <span id="analyst-count">0/400</span>
             </div>
             <button id="analyst-submit" class="analyst-submit" type="submit">Preguntar al analista</button>
           </form>
 
           <p id="analyst-status" class="analyst-status" role="status" aria-live="polite" aria-atomic="true"></p>
-          <div id="analyst-answer" class="analyst-answer" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" hidden>
-            <p id="analyst-answer-text"></p>
-          </div>
+          <button id="analyst-clear" class="analyst-clear" type="button" hidden>Borrar conversación</button>
         </div>
       </section>
 

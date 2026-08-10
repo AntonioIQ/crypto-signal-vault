@@ -2,15 +2,38 @@ export const MAX_ANALYST_WORDS = 120;
 
 export const ANALYST_INTENTS = Object.freeze({
   ADVICE: "advice",
-  OUT_OF_SCOPE: "out_of_scope",
+  // What used to be OUT_OF_SCOPE now only covers attempts to steer the analyst
+  // off its instructions. Everything else that isn't ours became GENERAL, which
+  // is the whole point of the conversational chat: a question about another
+  // topic is answered, not refused.
+  PROMPT_ATTACK: "prompt_attack",
   PRICE: "price",
   FORECAST: "forecast",
   CONFIDENCE: "confidence",
   ACCURACY: "accuracy",
   EXPLANATION: "explanation",
+  CONCEPT: "concept",
+  GENERAL: "general",
 });
 
+// The domains whose answers are statements about our own data, and therefore
+// carry the published-figures guarantee. GENERAL is deliberately outside it.
+export const GROUNDED_INTENTS = Object.freeze([
+  ANALYST_INTENTS.PRICE,
+  ANALYST_INTENTS.FORECAST,
+  ANALYST_INTENTS.CONFIDENCE,
+  ANALYST_INTENTS.ACCURACY,
+  ANALYST_INTENTS.EXPLANATION,
+  ANALYST_INTENTS.CONCEPT,
+]);
+
+// Fixed, written by us, never generated: a general-topic answer must announce
+// that it is not one of our measurements, and that promise cannot depend on the
+// model remembering to keep it.
+export const GENERAL_ANSWER_PREFIX = "Esto no sale de lo que medimos en LikelyCoin:";
+
 import { ASSETS } from "./coingecko.mjs";
+import { glossaryMatches, glossaryNumbers } from "./analyst-glossary.mjs";
 
 const ASSET_LABELS = Object.freeze(
   Object.fromEntries(Object.entries(ASSETS).map(([asset, meta]) => [asset, meta.name])),
@@ -23,9 +46,29 @@ function normalized(text) {
     .toLowerCase();
 }
 
-export function isAdviceQuestion(question) {
+// Asking to buy, sell or take a position is investment advice no matter what
+// else the sentence contains: it is refused on sight, always.
+// The stems carry an explicit tail (\w{0,3}) instead of a bare \b: written as
+// `recomiend\b` the alternative never fired, because "recomiendas" has no word
+// boundary after the stem. Endings stay bounded so "comprendo" is not read as
+// "compro".
+const TRANSACTIONAL_ADVICE = /\b(compr(?:a|ar|o|e|aria)s?|adquirir|vend(?:e|er|o|a|ria)s?|inviert(?:e|o|a|es|en)|invertir|inversion(?:es)?|mantener|conservar|apostar|entro|entrar|salgo|salir|posicion|cartera|portafolio)\b/;
+
+// Asking for a recommendation is advice only when the subject is money. In a
+// chat that now talks about anything, "¿me recomiendas una película?" was being
+// answered with "no puedo decirte si debes comprar o vender", which is both
+// useless and slightly absurd.
+const SOFT_ADVICE = /\b(conviene|debo|deberia|sugier\w{0,3}|sugerencia|aconsej\w{0,4}|consejo|recomiend\w{0,3}|recomendacion|buen momento|que harias|que hago)\b/;
+const FINANCIAL_SUBJECT = /\b(precio|mercado|moneda|monedas|cripto|criptomoneda|criptomonedas|dinero|plata|token|invers|bolsa|trading|ganar|perder|rendimiento)\b/;
+
+export function isAdviceQuestion(question, focus = undefined) {
   const text = normalized(question);
-  return /\b(compr(?:a|ar|o|e|aria)|adquirir|vend(?:e|er|o|a|ria)|inviert(?:e|o|a)|invertir|inversion|mantener|conservar|apostar|entro|entrar|salgo|salir|posicion|cartera|portafolio|conviene|debo|deberia|sugier|sugerencia|aconsej|consejo|recomiend|recomendacion|buen momento|que harias|que hago)\b/.test(text);
+  if (TRANSACTIONAL_ADVICE.test(text)) return true;
+  if (!SOFT_ADVICE.test(text)) return false;
+  // A recommendation asked while looking at a coin is about that coin.
+  return MENTIONS_ASSET.test(text)
+    || FINANCIAL_SUBJECT.test(text)
+    || (typeof focus === "string" && Object.hasOwn(ASSETS, focus));
 }
 
 export function containsUnsafeAdvice(answer) {
@@ -53,9 +96,30 @@ const ASSET_TERMS = Object.entries(ASSETS)
 
 const MENTIONS_ASSET = new RegExp(`\\b(?:${ASSET_TERMS.join("|")})\\b`);
 
+// Narrower than the pattern it replaces, on purpose. That one also caught bare
+// "sistema" and "clave", which in a chat that now discusses any topic refuses
+// ordinary questions ("¿qué es el sistema financiero?"). What stays are the
+// phrasings that only exist to move the analyst off its instructions.
+const PROMPT_ATTACK_PATTERN = /\b(ignora (?:todo|las|tus|lo)|olvida (?:todo|las|tus)|instrucciones (?:previas|anteriores|del sistema)|system prompt|prompt del sistema|muestra (?:tu|tus) (?:prompt|reglas|instrucciones)|revela (?:tu|tus)|api ?key|groq_api_key|actua como si|actúa como si|cambia de rol|jailbreak|modo desarrollador)\b/;
+
+// A follow-up that names no topic at all ("¿y por qué?", "¿cómo va?", "¿eso qué
+// significa?"). It only counts as one when it is short and refers back, so that
+// a full question about another subject is not swallowed into our data domain
+// just because a coin happens to be on screen.
+const FOLLOW_UP_PATTERN = /^(?:y|pero|entonces|ok|okay|ah|osea|o sea|ya|bueno)\b|\b(eso|esa|ese|eso mismo|ahi|ahí|lo anterior|lo que dijiste)\b/;
+
+function isBareFollowUp(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).length;
+  return words <= 4 || (words <= 10 && FOLLOW_UP_PATTERN.test(text));
+}
+
 export function classifyAnalystQuestion(question, focus = undefined) {
   const text = normalized(question);
-  if (isAdviceQuestion(question)) return ANALYST_INTENTS.ADVICE;
+  // These two are answered by fixed templates and never reach the provider, so
+  // they are decided before anything else can claim the question.
+  if (isAdviceQuestion(question, focus)) return ANALYST_INTENTS.ADVICE;
+  if (PROMPT_ATTACK_PATTERN.test(text)) return ANALYST_INTENTS.PROMPT_ATTACK;
+
   if (/\b(confianza|segura|seguro|certeza)\b/.test(text)) return ANALYST_INTENTS.CONFIDENCE;
   if (/\b(precision|aciert|acert|accuracy|resultado|medid)/.test(text)) return ANALYST_INTENTS.ACCURACY;
   if (/\b(precio|cuesta|cuestan|cotiza|valor|vale|valen)\b/.test(text)) return ANALYST_INTENTS.PRICE;
@@ -63,9 +127,8 @@ export function classifyAnalystQuestion(question, focus = undefined) {
     return ANALYST_INTENTS.FORECAST;
   }
 
-  const promptAttack = /\b(ignora|instrucciones|prompt|system|sistema|clave|api key|revela|muestra tus reglas|actua como|cambia de rol)\b/.test(text);
-  const unrelated = /\b(capital de|traduce|traduccion|codigo|programa|poema|receta|clima|futbol|deporte|presidente|politica|pelicula|correo|matemat|chiste|historia de)\b/.test(text);
-  if (promptAttack || unrelated) return ANALYST_INTENTS.OUT_OF_SCOPE;
+  // A term we have a written definition for is answered from that definition.
+  if (glossaryMatches(question).length > 0) return ANALYST_INTENTS.CONCEPT;
 
   if (
     MENTIONS_ASSET.test(text) ||
@@ -73,14 +136,24 @@ export function classifyAnalystQuestion(question, focus = undefined) {
   ) {
     return ANALYST_INTENTS.EXPLANATION;
   }
-  // A bare follow-up ("¿y por qué?", "¿cómo va?") names nothing at all. With a
-  // coin on screen it is plainly about that coin, so it is in scope — the prompt
-  // attack and off-topic patterns above have already had their say, so this
-  // cannot let an injection through.
-  if (typeof focus === "string" && Object.hasOwn(ASSETS, focus)) {
+  // With a coin on screen, a bare follow-up is plainly about that coin.
+  if (typeof focus === "string" && Object.hasOwn(ASSETS, focus) && isBareFollowUp(text)) {
     return ANALYST_INTENTS.EXPLANATION;
   }
-  return ANALYST_INTENTS.OUT_OF_SCOPE;
+  return ANALYST_INTENTS.GENERAL;
+}
+
+// A general-topic answer that talks about price, forecast, confidence, accuracy
+// or one of our coins is claiming our voice for something we did not measure.
+// The model may be wrong about the world; it may not be wrong as LikelyCoin.
+export function claimsOurMeasurement(answer) {
+  const text = normalized(answer);
+  return (
+    /\b(precio|precios|pronostico|prediccion|prediccion|confianza|precision|acierto|aciertos|hit rate|likelycoin|medimos|medicion|mediciones|snapshot)\b/.test(text) ||
+    /\bel modelo\b/.test(text) ||
+    MENTIONS_ASSET.test(text) ||
+    /%|\busd\b|\$/.test(text)
+  );
 }
 
 export function containsUngroundedExplanation(answer) {
@@ -178,8 +251,8 @@ function isGrounded(stated, values) {
   });
 }
 
-export function containsUngroundedNumbers(answer, context) {
-  const values = groundedValues(context);
+export function containsUngroundedNumbers(answer, context, extraValues = []) {
+  const values = [...groundedValues(context), ...extraValues];
   // Spanish thousands separators are dots and decimals are commas as often as
   // the reverse, so both are normalized before parsing.
   const matches = String(answer).match(/\d[\d.,]*/g) ?? [];
@@ -325,8 +398,18 @@ export function templateAnswer(
 
   if (intent === ANALYST_INTENTS.ADVICE) {
     answer = `No puedo decirte si debes comprar, vender o cuándo entrar. Solo describo lo que ve el modelo. ${forecastSummary(context, assets)}. Esto es educativo y no es asesoría financiera.`;
-  } else if (intent === ANALYST_INTENTS.OUT_OF_SCOPE) {
-    answer = `Solo puedo responder sobre el precio y las mediciones de las ${Object.keys(ASSETS).length} criptomonedas que aparecen en LikelyCoin. No tengo noticias, datos externos, instrucciones ocultas ni información de otros temas.`;
+  } else if (intent === ANALYST_INTENTS.PROMPT_ATTACK) {
+    answer = `Mis instrucciones no están a discusión y no las voy a mostrar. Con gusto seguimos: puedo hablarte del precio y las mediciones de las ${Object.keys(ASSETS).length} criptomonedas de LikelyCoin, o de casi cualquier otro tema.`;
+  } else if (intent === ANALYST_INTENTS.CONCEPT) {
+    const definitions = glossaryMatches(question);
+    answer = definitions.length > 0
+      ? definitions.map((entry) => entry.definition).join(" ")
+      : `Puedo explicarte conceptos de cripto con nuestras propias palabras, pero ese no lo tengo escrito. Pregúntame de otra forma y le entramos.`;
+  } else if (intent === ANALYST_INTENTS.GENERAL) {
+    // The graceful version of "I can't". A general answer that was rejected by
+    // the guards has to leave the conversation open, not slam a door — but it
+    // must not pretend to know something it cannot verify either.
+    answer = `Esa no la puedo contestar con algo que pueda verificar, así que prefiero no inventarte una respuesta. Donde sí piso firme es en lo que medimos aquí: precio, pronóstico, qué tan consistente es y qué tan seguido ha acertado.`;
   } else if (intent === ANALYST_INTENTS.CONFIDENCE) {
     answer = `Confianza publicada: ${confidenceSummary(context, assets)}. Describe qué tan consistente fue cada dirección en validaciones previas; no garantiza el resultado.`;
   } else if (intent === ANALYST_INTENTS.ACCURACY) {
@@ -358,11 +441,28 @@ export function finalizeAnalystResponse(answer, { question, context, asset }) {
     return replacement();
   }
 
+  // Outside our data, the analyst is allowed to be conversational but not to
+  // borrow our authority: an answer about another subject that starts talking
+  // about price, forecast or one of the coins is replaced, and one that states
+  // any figure is replaced too — a number we did not measure is exactly the
+  // thing this product exists to not publish.
+  if (intent === ANALYST_INTENTS.GENERAL) {
+    if (claimsOurMeasurement(answer) || /\d/.test(answer)) return replacement();
+    const spoken = limitWords(
+      `${GENERAL_ANSWER_PREFIX} ${answer.replace(/\s+/g, " ").trim()}`,
+    );
+    return { answer: spoken, replaced: false };
+  }
+
   // The analyst may now talk about the data instead of handing back a fixed
   // string, so the guarantee moves from "it states no figures at all" to "every
   // figure it states is one we published". A made-up number falls back to the
-  // canonical template, which is the answer that can never be wrong.
-  if (containsUngroundedNumbers(answer, context)) {
+  // canonical template, which is the answer that can never be wrong. A concept
+  // answer may also use the figures written into its own definition.
+  const allowed = intent === ANALYST_INTENTS.CONCEPT
+    ? glossaryNumbers(glossaryMatches(question))
+    : [];
+  if (containsUngroundedNumbers(answer, context, allowed)) {
     return replacement();
   }
 

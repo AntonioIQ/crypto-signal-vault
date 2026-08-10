@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-08-10 — Contrato del Analista conversacional + dos semanas de deuda documental
+
+**Cómo empezó**: Antonio preguntó qué estábamos actualizando. La respuesta fue
+incómoda: el sitio llevaba dos semanas entregando y los docs llevaban dos semanas
+congelados. Catorce commits en `main` (28-jul → 5-ago) sin una línea en STATUS ni
+en BITÁCORA. Quedaron registrados en la foto de STATUS; el bloque grueso es de
+**honestidad medida**: publicar el hit rate junto a los baselines que debe
+ganarle, medir el tamaño del error, dejar de publicar una magnitud inútil, y
+—lo más incómodo— **medir si la confianza publicada significa algo y descubrir
+que no**. Una confianza alta no ha correspondido a acertar más, y ahora el
+Analista lo dice con esas palabras en vez de presumirla.
+
+Verificado en producción el mismo día: 175 predicciones resueltas por moneda y
+**7 de 11 monedas por debajo de 50 % de acierto** (ADA 23.4 % abajo, HYPE 64.6 %
+arriba). Está en pantalla a propósito — el commit `289acfe` se llama «publish
+what we measure about ourselves, including the bad parts» y hace exactamente eso.
+
+**Lo nuevo**: Antonio quiere que el chat deje de ser una pregunta suelta y sea
+una plática — con memoria del hilo, capaz de responder temas variados y
+conceptos, y de volver a las monedas sin repetir contexto. Escribí el contrato
+completo en `08_CONVERSACION.md` antes de tocar código, y actualicé §3.1/§3.2 de
+`01_ARQUITECTURA.md`, que ya traían deriva contra el código real (prompt v1.0 vs
+v1.1, `max_tokens` 180 vs 280, 4 preguntas/10 min vs 8, 5k tokens/min vs 30k, y
+la afirmación —falsa desde `b48f4ad`— de que precio y pronóstico se contestan con
+plantilla sin llamar a Groq).
+
+**Dos decisiones de Antonio contra mi recomendación**, tomadas con el trade-off
+explícito enfrente y por eso mismo válidas: temario de **asistente general** (en
+vez de cripto + glosario) e historial **en el navegador** (en vez de Blobs con
+TTL). Juntas quitan las dos defensas que hoy hacen que el chat no se pueda
+voltear: el filtro que mantiene el texto ajeno lejos de Groq, y el rechazo de
+historia libre en el payload. Lo dejé escrito como riesgo aceptado en §6.3 en vez
+de discutirlo dos veces.
+
+**Lo que blindé a cambio**, y quedó en el contrato: asesoría y ataques al prompt
+siguen siendo plantilla determinista que **nunca toca el proveedor**; el guard de
+cifras publicadas se queda intacto; el hilo entra como mensajes con rol propio y
+jamás dentro del `system`; y un guard nuevo (`claimsOurMeasurement`) impide que
+una respuesta de tema general se disfrace de medición nuestra, con una línea
+fija —no generada por el modelo— que lo dice. El riesgo queda en «puede decir
+tonterías de temas ajenos», no en «puede mentir sobre lo que medimos».
+
+**Un hallazgo del camino, y es el que va primero**: `estimateChatTokenCost` cobra
+el *tope* del prompt (8,000 bytes) en vez de su tamaño real → ~8.4k por pregunta
+contra 30,000/minuto = **3 preguntas por minuto en todo el sitio**. Es el mismo
+acoplamiento que ya tumbó el chat entero con `429` el 28-jul (`6a5df18`), y con
+plática de verdad revienta otra vez. Cobrar bytes reales es el paquete 1.
+
+**Costo de la sesión**: cero. Solo `docs/`, que Netlify ignora — 0 créditos, 0
+deploys.
+
+---
+
 ## 2026-07-27 — 11 monedas EN PRODUCCIÓN + mejoras de gráfica
 
 Antonio pidió "las 10 más usadas y Cheems". Verificado con CoinGecko que Cheems vive (`cheems-token`, rank ~282). Elegido 10 conocidas + Cheems (sin stablecoins ni tokens raros, por honestidad: un stablecoin sería una línea plana). Sistema ya data-driven, así que fue extender `ASSETS`/`SUPPORTED_ASSETS` + pestañas dinámicas + precio adaptativo (Cheems ≈ $0.0000005) + semillas reales de las 11.
