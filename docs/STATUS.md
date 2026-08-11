@@ -2,11 +2,45 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-08-10 16:50 (hora CDMX)
+**Última actualización**: 2026-08-11 02:10 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
-## Fase activa: ninguna — ANALISTA CONVERSACIONAL EN PRODUCCIÓN ✅ (2026-08-10)
+## Fase activa: ninguna — ANALISTA CONVERSACIONAL + FICHA DEL AUTOR EN PRODUCCIÓN ✅
+
+### Segunda entrega (2026-08-11, madrugada) — PR [#6](https://github.com/AntonioIQ/crypto-signal-vault/pull/6), `5283de2`, 1 deploy
+
+Cuatro cosas en un solo deploy de 15 créditos:
+
+1. **La transcripción sigue la conversación.** Antonio reportó que el hilo se
+   quedaba estático y había que arrastrar la barra para leer la respuesta recién
+   pedida. El contenedor tiene scroll propio para que el cuadro de escribir no se
+   mueva, pero nada lo movía. La posición se asienta al pintar el turno y otra
+   vez tras el siguiente layout; sin animación, para que no dependa de que una
+   animación ocurra.
+2. **El Analista puede decir quién construyó el sitio.** Preguntas por Toño, José
+   Antonio, Antonio Tapia o «¿quién hizo esto?» van a un dominio propio,
+   contestado **solo** desde la ficha de `netlify/lib/analyst-author.mjs`. Dos
+   guards encima: las cifras se aterrizan contra la ficha, y una respuesta que
+   introduzca un nombre propio que la ficha no tenga —una universidad, un
+   empleador, una ciudad— se sustituye. Verificado en producción: «¿en qué equipo
+   de futbol juega?» se niega a inventar.
+3. **Hoyo en el guard de cifras, cerrado.** La tolerancia del 0.5 % que perdona un
+   precio redondeado se aplicaba a *toda* cifra publicada, así que el año 2026
+   aterrizaba cualquier año entre 2016 y 2036: una fecha inventada pasaba el
+   check que existe para impedir cifras inventadas. Ahora precios y porcentajes
+   toleran redondeo; conteos, horas y años deben coincidir exacto.
+4. **Pendiente del presupuesto (§6), cerrado gratis** por ir batcheado.
+
+**Sobre la ficha del autor**: el contenido salió de lo que Antonio publica él
+mismo (footer y su GitHub, cuyo correo coincide y confirma que es él y no un
+homónimo) más lo que él confirmó. La tesis y el libro se verificaron contra el
+repositorio de la UNAM y un catálogo de librería antes de publicarlos. **No** se
+armó con una búsqueda web: buscar su nombre devuelve otras personas por completo.
+Quedaron fuera a decisión suya la vida personal, la fe y los empleadores previos
+uno por uno.
+
+## Primera entrega (2026-08-10) — el Analista conversacional
 
 El chat dejó de ser una pregunta suelta y es una plática. PR [#5](https://github.com/AntonioIQ/crypto-signal-vault/pull/5)
 mergeada (`182e249`), **1 deploy = 15 créditos**, sin env vars nuevas. Contrato
@@ -283,9 +317,15 @@ El histórico ya no depende del bootstrap. `refresh-history.mjs` reescribe la ve
 
 ## Siguiente paso (uno solo)
 
-➡️ **Usarlo.** El Analista conversacional está en línea y no requiere acción.
-Lo único que las pruebas no pueden decidir es si la plática **se siente** fluida:
-eso es criterio de Antonio con el sitio abierto.
+➡️ **Confirmar el auto-scroll con ojos humanos.** Es lo único entregado sin
+verificar: el navegador del entorno de trabajo no renderiza —el panel queda
+oculto, `requestAnimationFrame` no dispara y ninguna operación de scroll surte
+efecto—, así que la lógica está probada pero **nadie ha visto la transcripción
+moverse**. Abrir el sitio, hacer tres o cuatro preguntas seguidas y comprobar
+que la conversación sigue sola. Si no, hay que abordarlo distinto.
+
+Fuera de eso, **usarlo**. Lo que las pruebas no pueden decidir es si la plática
+**se siente** fluida: eso es criterio de Antonio con el sitio abierto.
 
 **Vigilar en los próximos días** (vistazo, sin acción): con temario abierto, toda
 pregunta fuera de tema ahora cuesta inferencia — antes se contestaba con

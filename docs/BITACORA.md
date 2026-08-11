@@ -4,6 +4,68 @@
 
 ---
 
+## 2026-08-11 (madrugada) — El hilo ya se mueve, y el Analista sabe quién lo hizo ✅
+
+PR [#6](https://github.com/AntonioIQ/crypto-signal-vault/pull/6) mergeada
+(`5283de2`), **1 deploy = 15 créditos**, 171 pruebas Node + 61 Python.
+
+**Lo que abrió el PR fue un reporte de Antonio**: «la conversación no se mueve,
+hay que recorrer el scroll manualmente». Cierto, y era un descuido mío del día
+anterior: el contenedor tiene scroll propio para que el cuadro de escribir no se
+mueva, pero nunca escribí nada que lo moviera.
+
+**Lo segundo que pidió**: que el chat pueda decir quién es él. Se resolvió con una
+ficha en el repo, no con una búsqueda: preguntas por Toño / José Antonio / Antonio
+Tapia / «¿quién hizo esto?» van a un dominio propio contestado solo desde
+`analyst-author.mjs`, con dos guards encima (cifras aterrizadas contra la ficha,
+y sustitución si la respuesta mete un nombre propio que la ficha no tiene).
+
+**Sobre de dónde salió el contenido de la ficha**, porque importa: Antonio pegó
+una semblanza larga escrita por ChatGPT y dijo «investiga de mí en la red». Lo
+que hice fue buscar de verdad y reportar honestamente: su GitHub sí sirve y es
+verificablemente suyo (el correo coincide con el del footer); LinkedIn responde
+`HTTP 999`; y **buscar su nombre devuelve otras personas por completo** —un
+académico de la UNAM homónimo, un filósofo español, políticos dominicanos—. De la
+semblanza verifiqué lo falsificable antes de publicarlo: la tesis existe en el
+repositorio de la UNAM y el libro con ese ISBN está catalogado a su nombre.
+ChatGPT no había inventado eso. Lo que **no** entró: vida personal, fe, la
+sección de debilidades y la lista de empleadores previos — decisión suya.
+
+**Tres bugs más, y el primero es del corazón del producto**:
+
+1. **La tolerancia del guard de cifras se aplicaba a los años.** El 0.5 % que
+   perdona un precio redondeado hacía que `2026` aterrizara cualquier año entre
+   **2016 y 2036**: una fecha inventada pasaba justo el check que existe para
+   impedir cifras inventadas. Ahora precios y porcentajes toleran redondeo;
+   conteos, horas y años, no.
+2. **Un fixture dependía del reloj.** `fillPrices` usaba `new Date()`, y los
+   dígitos de «ahora» se aterrizan solos: la misma prueba pasaba a las 22:00 y
+   fallaba a las 03:52 porque la hora contenía el dígito bajo prueba. Así se
+   descubrió el bug anterior.
+3. **Un seguimiento sobre Antonio dejaba de ser sobre Antonio.** «¿quién es
+   Toño?» contestaba bien; «¿qué deporte le gusta?» decía no tener información
+   sobre gustos de nadie —un gusto que la ficha publica— y «¿está casado?» lo
+   contestaba **sobre sí mismo**: «no tengo estado civil, soy un modelo de
+   lenguaje». El dominio de autor solo se activaba si la pregunta lo nombraba.
+   Ahora el hilo carga el tema, igual que ya hacía la moneda en pantalla.
+
+**Lo encontré porque hice la segunda pregunta, no la primera.** Misma lección que
+el CORS de ayer: los tests verdes no sustituyen usar la cosa.
+
+**Una corrección que me debo a mí mismo**: intenté dos versiones del scroll con
+desplazamiento suave y «comprobé» que no funcionaban. Esa evidencia era falsa —
+el panel del navegador del entorno está oculto, así que no renderiza,
+`requestAnimationFrame` no dispara y ninguna operación de scroll surte efecto.
+Era artefacto de medición. La versión sin animación se quedó, pero por una razón
+honesta (aterrizar es el requisito) y no por la que afirmé. **Queda pendiente que
+un humano confirme que la transcripción se mueve**; es lo único entregado sin
+verificar.
+
+**Presupuesto**: el pendiente de `06_PRESUPUESTO.md` §6 viajó batcheado aquí y
+costó cero, tal como estaba planeado.
+
+---
+
 ## 2026-08-10 (tarde) — EL ANALISTA CONVERSACIONAL EN PRODUCCIÓN ✅
 
 Misma sesión, segunda mitad: del contrato al sitio en línea. PR #5 mergeada
