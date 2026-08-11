@@ -13,6 +13,7 @@ export const ANALYST_INTENTS = Object.freeze({
   ACCURACY: "accuracy",
   EXPLANATION: "explanation",
   CONCEPT: "concept",
+  AUTHOR: "author",
   GENERAL: "general",
 });
 
@@ -25,6 +26,7 @@ export const GROUNDED_INTENTS = Object.freeze([
   ANALYST_INTENTS.ACCURACY,
   ANALYST_INTENTS.EXPLANATION,
   ANALYST_INTENTS.CONCEPT,
+  ANALYST_INTENTS.AUTHOR,
 ]);
 
 // Fixed, written by us, never generated: a general-topic answer must announce
@@ -34,6 +36,12 @@ export const GENERAL_ANSWER_PREFIX = "Esto no sale de lo que medimos en LikelyCo
 
 import { ASSETS } from "./coingecko.mjs";
 import { glossaryMatches, glossaryNumbers } from "./analyst-glossary.mjs";
+import {
+  AUTHOR_PROFILE,
+  authorNumbers,
+  introducesUnknownName,
+  isAuthorQuestion,
+} from "./analyst-author.mjs";
 
 const ASSET_LABELS = Object.freeze(
   Object.fromEntries(Object.entries(ASSETS).map(([asset, meta]) => [asset, meta.name])),
@@ -113,7 +121,22 @@ function isBareFollowUp(text) {
   return words <= 4 || (words <= 10 && FOLLOW_UP_PATTERN.test(text));
 }
 
-export function classifyAnalystQuestion(question, focus = undefined) {
+// True when the conversation has been about the person who built the site. A
+// follow-up rarely repeats a name: you ask "¿quién es Toño?" and then "¿y qué le
+// gusta?". Without this, the second question left the author domain and the
+// analyst answered about itself — "no tengo estado civil, soy un modelo de
+// lenguaje" — or claimed to know nothing about a taste we do publish.
+export function threadIsAboutAuthor(history = []) {
+  return history.some((turn) => typeof turn?.text === "string" && isAuthorQuestion(turn.text));
+}
+
+// Deliberately narrow. "le" and "él" point at a person; "lo", "el" and "su"
+// point at anything, and the data intents are decided before this anyway.
+const REFERS_TO_PERSON = /\b(le|el|ella)\b/;
+// What people actually ask about a person once they know who he is.
+const BIOGRAPHICAL = /\b(estudi\w*|trabaj\w*|vive|vivio|nacio|casad\w*|hijos|edad|carrera|profesion|experiencia|gusta\w*|aficion\w*|deporte\w*|hobby|quien es)\b/;
+
+export function classifyAnalystQuestion(question, focus = undefined, options = {}) {
   const text = normalized(question);
   // These two are answered by fixed templates and never reach the provider, so
   // they are decided before anything else can claim the question.
@@ -125,6 +148,20 @@ export function classifyAnalystQuestion(question, focus = undefined) {
   if (/\b(precio|cuesta|cuestan|cotiza|valor|vale|valen)\b/.test(text)) return ANALYST_INTENTS.PRICE;
   if (/\b(prediccion|pronostico|48\s*(?:h|horas)|direccion|subida|bajada|lectura actual)\b/.test(text)) {
     return ANALYST_INTENTS.FORECAST;
+  }
+
+  // Who built this. Answered only from the profile he wrote, never from what a
+  // model happens to associate with a real person's name.
+  if (isAuthorQuestion(question)) return ANALYST_INTENTS.AUTHOR;
+
+  // Still about him: the thread has been, and this question either refers back
+  // or names nothing at all.
+  if (
+    options.authorThread &&
+    !MENTIONS_ASSET.test(text) &&
+    (isBareFollowUp(text) || REFERS_TO_PERSON.test(text) || BIOGRAPHICAL.test(text))
+  ) {
+    return ANALYST_INTENTS.AUTHOR;
   }
 
   // A term we have a written definition for is answered from that definition.
@@ -203,45 +240,61 @@ function timestampNumbers(value) {
   return numbers;
 }
 
+// Published figures come in two kinds, and conflating them was a hole in the
+// one guarantee this product cannot lose.
+//
+// A price or a percentage may legitimately be rounded ("63,935.12" → "63,935"),
+// so those tolerate a little slack. A count, an hour and a year may not: they
+// are already exact, and the proportional slack turned the year 2026 into a
+// licence to state anything from 2016 to 2036 — an invented date passing the
+// check that exists to stop invented figures.
 function groundedValues(context) {
-  const values = [...PRODUCT_NUMBERS];
-  const push = (value) => {
+  const exact = [...PRODUCT_NUMBERS];
+  const approximate = [];
+  const pushExact = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
-      values.push(value, Math.abs(value));
+      exact.push(value, Math.abs(value));
+    }
+  };
+  const pushApproximate = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      approximate.push(value, Math.abs(value));
     }
   };
 
-  values.push(...timestampNumbers(context?.generated_at));
+  exact.push(...timestampNumbers(context?.generated_at));
 
   for (const item of Object.values(context?.assets ?? {})) {
-    push(item.price_usd);
-    values.push(...timestampNumbers(item.source_updated_at));
-    values.push(...timestampNumbers(item.accuracy?.measured_through));
+    pushApproximate(item.price_usd);
+    exact.push(...timestampNumbers(item.source_updated_at));
+    exact.push(...timestampNumbers(item.accuracy?.measured_through));
     const forecast = item.forecast ?? {};
-    push(forecast.horizon_hours);
-    push(forecast.terminal_change_percent);
-    push(forecast.confidence?.percent);
-    push(forecast.confidence?.sample_size);
+    pushExact(forecast.horizon_hours);
+    pushApproximate(forecast.terminal_change_percent);
+    pushApproximate(forecast.confidence?.percent);
+    pushExact(forecast.confidence?.sample_size);
     // The scenario board states "N de M escenarios", so that N is a figure the
     // product itself publishes even though it is derived from the other two.
     if (
       typeof forecast.confidence?.percent === "number" &&
       typeof forecast.confidence?.sample_size === "number"
     ) {
-      push(Math.round((forecast.confidence.percent / 100) * forecast.confidence.sample_size));
+      pushExact(Math.round((forecast.confidence.percent / 100) * forecast.confidence.sample_size));
     }
     const accuracy = item.accuracy ?? {};
-    push(accuracy.window_days);
-    push(accuracy.hit_rate_percent);
-    push(accuracy.sample_size);
+    pushExact(accuracy.window_days);
+    pushApproximate(accuracy.hit_rate_percent);
+    pushExact(accuracy.sample_size);
   }
-  return values;
+  return { exact, approximate };
 }
 
 // A stated figure counts as grounded when it is a published value, or that
-// value rounded the way a person would write it.
-function isGrounded(stated, values) {
-  return values.some((value) => {
+// value rounded the way a person would write it. Rounding is only forgiven for
+// the kinds of figure a person actually rounds.
+function isGrounded(stated, { exact, approximate }) {
+  if (exact.some((value) => Number.isFinite(value) && stated === value)) return true;
+  return approximate.some((value) => {
     if (!Number.isFinite(value)) return false;
     if (stated === value) return true;
     if (stated === Math.round(value)) return true;
@@ -252,7 +305,10 @@ function isGrounded(stated, values) {
 }
 
 export function containsUngroundedNumbers(answer, context, extraValues = []) {
-  const values = [...groundedValues(context), ...extraValues];
+  const published = groundedValues(context);
+  // Glossary figures are written by us and already exact ("21 millones"), so
+  // they ground themselves and nothing near them.
+  const values = { exact: [...published.exact, ...extraValues], approximate: published.approximate };
   // Spanish thousands separators are dots and decimals are commas as often as
   // the reverse, so both are normalized before parsing.
   const matches = String(answer).match(/\d[\d.,]*/g) ?? [];
@@ -405,6 +461,8 @@ export function templateAnswer(
     answer = definitions.length > 0
       ? definitions.map((entry) => entry.definition).join(" ")
       : `Puedo explicarte conceptos de cripto con nuestras propias palabras, pero ese no lo tengo escrito. Pregúntame de otra forma y le entramos.`;
+  } else if (intent === ANALYST_INTENTS.AUTHOR) {
+    answer = AUTHOR_PROFILE.join(" ");
   } else if (intent === ANALYST_INTENTS.GENERAL) {
     // The graceful version of "I can't". A general answer that was rejected by
     // the guards has to leave the conversation open, not slam a door — but it
@@ -425,8 +483,11 @@ export function templateAnswer(
   return limitWords(answer);
 }
 
-export function finalizeAnalystResponse(answer, { question, context, asset }) {
-  const intent = classifyAnalystQuestion(question, asset);
+export function finalizeAnalystResponse(answer, { question, context, asset, intent: given }) {
+  // The caller already classified the question, with the conversation in hand.
+  // Re-deriving it here without that history sent a follow-up about the author
+  // down the general-topic path, where the guards are the wrong ones.
+  const intent = given ?? classifyAnalystQuestion(question, asset);
   const replacement = () => ({
     answer: templateAnswer(question, context, intent, asset),
     replaced: true,
@@ -459,9 +520,17 @@ export function finalizeAnalystResponse(answer, { question, context, asset }) {
   // figure it states is one we published". A made-up number falls back to the
   // canonical template, which is the answer that can never be wrong. A concept
   // answer may also use the figures written into its own definition.
-  const allowed = intent === ANALYST_INTENTS.CONCEPT
-    ? glossaryNumbers(glossaryMatches(question))
-    : [];
+  // A statement about a real, named person is the one place where "it sounded
+  // plausible" is worthless. If the answer introduces a name we did not publish
+  // — a university, an employer, a city — the model went past the profile and
+  // the canned bio takes over.
+  if (intent === ANALYST_INTENTS.AUTHOR && introducesUnknownName(answer)) {
+    return replacement();
+  }
+
+  let allowed = [];
+  if (intent === ANALYST_INTENTS.CONCEPT) allowed = glossaryNumbers(glossaryMatches(question));
+  if (intent === ANALYST_INTENTS.AUTHOR) allowed = authorNumbers();
   if (containsUngroundedNumbers(answer, context, allowed)) {
     return replacement();
   }

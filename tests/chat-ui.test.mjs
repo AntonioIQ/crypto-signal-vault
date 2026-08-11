@@ -77,6 +77,12 @@ function fakeElement({ hidden = false, dataset = {} } = {}) {
     focusCount: 0,
     listeners,
     children: [],
+    // A scrollable box: scrollHeight grows with its children, and scrollTop is
+    // where the reader is actually looking.
+    scrollTop: 0,
+    style: {},
+    get scrollHeight() { return this.children.length * 100; },
+    clientHeight: 250,
     setAttribute(name, value) { attributes.set(name, String(value)); },
     removeAttribute(name) { attributes.delete(name); },
     getAttribute(name) { return attributes.get(name) ?? null; },
@@ -221,6 +227,44 @@ test("the conversation is sent back as history and survives a reload of the tab"
   assert.deepEqual(transcriptOf(second.thread), []);
   assert.equal(second.clear.hidden, true);
   assert.equal(storage.getItem("likelycoin.analyst.thread"), null);
+});
+
+// The thread scrolls inside its own box. Painting a turn without moving it left
+// every answer below the fold: the reader had to drag the scrollbar to read the
+// reply they had just asked for.
+test("the transcript follows the newest turn without being dragged", async () => {
+  const storage = memoryStorage();
+  const h = chatHarness({ storage });
+  await initChat(h);
+
+  h.question.value = "¿cómo va bitcoin?";
+  await h.form.listeners.submit({ preventDefault() {} });
+
+  assert.equal(h.thread.children.length, 2);
+  assert.equal(
+    h.thread.scrollTop,
+    h.thread.scrollHeight,
+    "the box must sit at the newest turn after the answer lands",
+  );
+  // Reopening the tab lands at the bottom too.
+  const reopened = chatHarness({ storage });
+  await initChat(reopened);
+  assert.equal(reopened.thread.scrollTop, reopened.thread.scrollHeight);
+});
+
+// The position must not depend on an animation running: it is set by assigning
+// scrollTop, and asserted again after the next layout. Landing is the
+// requirement; gliding is not.
+test("nothing animates the transcript's scroll", async () => {
+  const client = await readFile("public/js/chat.js", "utf8");
+  const css = await readFile("public/css/styles.css", "utf8");
+  assert.doesNotMatch(client, /container\.scrollTo\(/);
+  assert.match(client, /container\.scrollTop = container\.scrollHeight/);
+  assert.doesNotMatch(
+    css,
+    /\.analyst-thread\s*\{[^}]*scroll-behavior:\s*smooth/,
+    "smooth scrolling on this box is what broke it",
+  );
 });
 
 test("an unanswered question leaves no phantom turn in the thread", async () => {

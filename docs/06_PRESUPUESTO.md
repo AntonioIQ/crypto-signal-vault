@@ -50,7 +50,16 @@ CoinGecko (ver §3.6), no hay razón presupuestal para diferirla.
 
 Revisar el [balance de créditos](https://app.netlify.com/teams/antapia3003-i3ib1te/billing/general#credit-balance) al cierre de cada fase. Señal de alarma: consumo >150 créditos a mitad de ciclo, o cualquier línea distinta de «Production deploys» que pase de 5 créditos (significaría que algo dispara requests o bandwidth de más).
 
-## 6. Hoyo conocido en la lista de exclusiones (pendiente, 2026-08-10)
+## 6. Hoyo en la lista de exclusiones — RESUELTO (2026-08-10)
+
+> **Cerrado el mismo día**, batcheado con el arreglo del scroll del chat, tal
+> como decía el plan de abajo: `.claude/launch.json` quedó en `.gitignore`, y el
+> comando `ignore` de `netlify.toml` ahora excluye `.claude/` y `.gitignore`.
+> Costo adicional: **0** — viajó en un deploy que ya se iba a pagar.
+
+El diagnóstico se conserva porque la lección es reusable: **la lista razona en
+carpetas y se le escapan los archivos sueltos de raíz.** Cualquier config nueva
+de herramientas que no sea `.md` vuelve a caer en el mismo hoyo.
 
 El comando `ignore` excluye **carpetas de trabajo** (`docs/`, `.github/`, `ml/`,
 `tests/`) y **todo `*.md`**. Lo que se le escapa son los **archivos sueltos que no
@@ -67,15 +76,16 @@ Es decir: agregar un archivo de configuración local de 8 líneas cuesta lo mism
 que desplegar una fase entera. Y arreglarlo también cuesta, porque el commit que
 edite `.gitignore` o `netlify.toml` tampoco está excluido.
 
-**Decisión (10-ago)**: no gastar un deploy en esto por sí solo. Se arregla
-**batcheado con el próximo cambio de código**, cuando el deploy ya está pagado:
+**Decisión (10-ago)**: no gastar un deploy en esto por sí solo, sino batchearlo
+con el próximo cambio de código. Lo aplicado fue:
 
-1. Agregar `.claude/launch.json` a `.gitignore` — es config de la máquina de
-   quien desarrolla (ruta de python, puerto del preview), no verdad del proyecto,
-   y se regenera en segundos.
-2. Agregar `':(exclude).claude/'` y `':(exclude).gitignore'` al comando `ignore`
-   de `netlify.toml`, para cerrar el hoyo hacia adelante.
+1. `.claude/launch.json` a `.gitignore` — es config de la máquina de quien
+   desarrolla (ruta de python, puerto del preview), no verdad del proyecto, y se
+   regenera en segundos. ☑
+2. `':(exclude).claude/'` y `':(exclude).gitignore'` en el comando `ignore` de
+   `netlify.toml`, para cerrar el hoyo hacia adelante. ☑
 
-Mientras tanto, `.claude/launch.json` se queda sin trackear: aparece como `??` en
-`git status`, y eso cuesta cero.
+**La regla general que queda**: antes de agregar al repo cualquier archivo de
+configuración de herramientas, pregúntate si puede cambiar el sitio. Si no puede,
+tiene que estar excluido del build **antes** de commitearlo, o en `.gitignore`.
 

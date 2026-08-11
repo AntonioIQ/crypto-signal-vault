@@ -1470,6 +1470,10 @@ a {
   gap: 12px;
   max-height: 420px;
   overflow-y: auto;
+  /* No smooth scrolling here, on purpose: the transcript follows the newest turn
+     by assigning scrollTop, and animating that assignment makes the box's
+     position depend on an animation actually running. Jumping to the newest
+     message always lands, and is what chats do anyway. */
   margin-bottom: 20px;
   padding-right: 4px;
 }

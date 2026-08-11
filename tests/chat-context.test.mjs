@@ -255,6 +255,94 @@ test("investment advice is refused, and a film recommendation is not investment 
   );
 });
 
+// Asking who built this used to fall through to the general topic domain, which
+// means a language model improvising about a real, named person. It is answered
+// from a profile he wrote, and nothing beyond it may be said.
+test("questions about the author are answered only from his own profile", async () => {
+  const { finalizeAnalystResponse } = await import("../netlify/lib/analyst-fallback.mjs");
+  const context = buildAnalystContext(chatSnapshot());
+
+  for (const asked of [
+    "¿quién es Toño?",
+    "¿quién es Antonio Tapia?",
+    "¿quién es José Antonio?",
+    "¿quién hizo este sitio?",
+    "¿quién está detrás de LikelyCoin?",
+    "¿de quién es este sitio?",
+  ]) {
+    assert.equal(classifyAnalystQuestion(asked), ANALYST_INTENTS.AUTHOR, asked);
+  }
+
+  const canned = templateAnswer("¿quién es Toño?", context);
+  assert.match(canned, /José Antonio Tapia Godínez/);
+  assert.match(canned, /Toño/);
+
+  // A biography the model made up is replaced, whatever it sounds like.
+  for (const invented of [
+    "Toño estudió en Harvard y trabaja en Google desde hace años.",
+    "Es economista egresado de la Universidad Nacional.",
+    "Vive en Madrid y dirige una consultora llamada Quantum.",
+  ]) {
+    assert.equal(
+      finalizeAnalystResponse(invented, { question: "¿quién es Toño?", context }).replaced,
+      true,
+      `must not publish an invented life: ${invented}`,
+    );
+  }
+
+  // And a faithful rephrasing is served as written.
+  const faithful = "LikelyCoin lo construyó José Antonio Tapia Godínez, también conocido como Toño. Publica su código en GitHub y su perfil profesional está en LinkedIn.";
+  assert.equal(
+    finalizeAnalystResponse(faithful, { question: "¿quién es Toño?", context }).replaced,
+    false,
+  );
+});
+
+// A follow-up rarely repeats a name. Without the thread, "¿y qué le gusta?"
+// left the author domain: the analyst answered about itself ("no tengo estado
+// civil, soy un modelo de lenguaje") or denied knowing a taste we do publish.
+test("the conversation stays on the author once it is about him", async () => {
+  const { threadIsAboutAuthor } = await import("../netlify/lib/analyst-fallback.mjs");
+  const history = [
+    { role: "user", text: "¿quién es Toño?" },
+    { role: "analyst", text: "Toño es José Antonio Tapia Godínez, quien construyó LikelyCoin." },
+  ];
+  assert.equal(threadIsAboutAuthor(history), true);
+  assert.equal(threadIsAboutAuthor([{ role: "user", text: "¿cómo va bitcoin?" }]), false);
+
+  const authorThread = true;
+  for (const followUp of [
+    "¿qué deporte le gusta?",
+    "¿está casado?",
+    "¿dónde estudió?",
+    "¿dónde trabajó antes?",
+    "¿y qué más?",
+  ]) {
+    assert.equal(
+      classifyAnalystQuestion(followUp, "btc", { authorThread }),
+      ANALYST_INTENTS.AUTHOR,
+      followUp,
+    );
+  }
+
+  // Our own data still wins: being mid-biography does not make a price question
+  // about the person.
+  assert.equal(
+    classifyAnalystQuestion("¿cuánto vale bitcoin?", "btc", { authorThread }),
+    ANALYST_INTENTS.PRICE,
+  );
+  assert.equal(
+    classifyAnalystQuestion("¿qué tan seguido acierta?", "btc", { authorThread }),
+    ANALYST_INTENTS.ACCURACY,
+  );
+
+  // And with no such thread, a bare follow-up belongs to the coin on screen.
+  assert.equal(
+    classifyAnalystQuestion("¿y qué más?", "btc", { authorThread: false }),
+    ANALYST_INTENTS.EXPLANATION,
+  );
+});
+
 test("concepts are answered from our own written definitions", () => {
   for (const [question, expected] of [
     ["¿qué es la volatilidad?", ANALYST_INTENTS.CONCEPT],
@@ -329,4 +417,33 @@ test("dates we publish are grounded, invented ones are not", () => {
       `should be rejected: ${invented}`,
     );
   }
+});
+
+// The tolerance that forgives a rounded price used to apply to every published
+// figure, so the year 2026 grounded anything from 2016 to 2036: an invented date
+// walked straight through the check that exists to stop invented figures. A
+// price may be rounded; a year, an hour and a count may not.
+test("rounding is forgiven for prices, never for years, hours or counts", () => {
+  const context = buildAnalystContext(chatSnapshot());
+
+  // 65,000 is published, so writing it shorter is still the same figure.
+  assert.equal(containsUngroundedNumbers("Bitcoin ronda los 65000 USD.", context), false);
+
+  for (const nearMiss of [
+    "Los datos son del 21 de julio de 2025.",
+    "Los datos son del 21 de julio de 2030.",
+    "La lectura se ancló a las 13:00.",
+    "Se midieron 95 predicciones.",
+    "Se midieron 97 predicciones.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(nearMiss, context),
+      true,
+      `a figure near a published one is not a published figure: ${nearMiss}`,
+    );
+  }
+
+  // And the real ones still pass.
+  assert.equal(containsUngroundedNumbers("Se midieron 96 predicciones.", context), false);
+  assert.equal(containsUngroundedNumbers("Los datos son del 21 de julio de 2026.", context), false);
 });
