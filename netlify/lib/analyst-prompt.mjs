@@ -80,7 +80,11 @@ export function buildAnalystSystemPrompt(context, focus = undefined, options = {
   const glossary = options.glossary
     ? `\nDEFINICIONES NUESTRAS (úsalas, no las contradigas):\n${options.glossary}`
     : "";
-  const prompt = `${ANALYST_SYSTEM_PROMPT}${looking}${glossary}\nCONTEXTO:\n${serializeAnalystContext(context)}`;
+  // Everything the analyst may say about a real, named person, and nothing else.
+  const author = options.author
+    ? `\nSOBRE QUIEN CONSTRUYÓ ESTE SITIO — esto es TODO lo que sabes de él. No\nagregues estudios, empleos, ciudades ni fechas que no estén aquí; si te\npreguntan algo que no aparece, di que no lo sabes:\n${options.author}`
+    : "";
+  const prompt = `${ANALYST_SYSTEM_PROMPT}${looking}${glossary}${author}\nCONTEXTO:\n${serializeAnalystContext(context)}`;
   if (new TextEncoder().encode(prompt).byteLength > MAX_ANALYST_SYSTEM_PROMPT_BYTES) {
     throw new RangeError("Analyst system prompt exceeds its token-budget envelope.");
   }

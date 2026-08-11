@@ -13,6 +13,7 @@ export const ANALYST_INTENTS = Object.freeze({
   ACCURACY: "accuracy",
   EXPLANATION: "explanation",
   CONCEPT: "concept",
+  AUTHOR: "author",
   GENERAL: "general",
 });
 
@@ -25,6 +26,7 @@ export const GROUNDED_INTENTS = Object.freeze([
   ANALYST_INTENTS.ACCURACY,
   ANALYST_INTENTS.EXPLANATION,
   ANALYST_INTENTS.CONCEPT,
+  ANALYST_INTENTS.AUTHOR,
 ]);
 
 // Fixed, written by us, never generated: a general-topic answer must announce
@@ -34,6 +36,12 @@ export const GENERAL_ANSWER_PREFIX = "Esto no sale de lo que medimos en LikelyCo
 
 import { ASSETS } from "./coingecko.mjs";
 import { glossaryMatches, glossaryNumbers } from "./analyst-glossary.mjs";
+import {
+  AUTHOR_PROFILE,
+  authorNumbers,
+  introducesUnknownName,
+  isAuthorQuestion,
+} from "./analyst-author.mjs";
 
 const ASSET_LABELS = Object.freeze(
   Object.fromEntries(Object.entries(ASSETS).map(([asset, meta]) => [asset, meta.name])),
@@ -126,6 +134,10 @@ export function classifyAnalystQuestion(question, focus = undefined) {
   if (/\b(prediccion|pronostico|48\s*(?:h|horas)|direccion|subida|bajada|lectura actual)\b/.test(text)) {
     return ANALYST_INTENTS.FORECAST;
   }
+
+  // Who built this. Answered only from the profile he wrote, never from what a
+  // model happens to associate with a real person's name.
+  if (isAuthorQuestion(question)) return ANALYST_INTENTS.AUTHOR;
 
   // A term we have a written definition for is answered from that definition.
   if (glossaryMatches(question).length > 0) return ANALYST_INTENTS.CONCEPT;
@@ -424,6 +436,8 @@ export function templateAnswer(
     answer = definitions.length > 0
       ? definitions.map((entry) => entry.definition).join(" ")
       : `Puedo explicarte conceptos de cripto con nuestras propias palabras, pero ese no lo tengo escrito. Pregúntame de otra forma y le entramos.`;
+  } else if (intent === ANALYST_INTENTS.AUTHOR) {
+    answer = AUTHOR_PROFILE.join(" ");
   } else if (intent === ANALYST_INTENTS.GENERAL) {
     // The graceful version of "I can't". A general answer that was rejected by
     // the guards has to leave the conversation open, not slam a door — but it
@@ -478,9 +492,17 @@ export function finalizeAnalystResponse(answer, { question, context, asset }) {
   // figure it states is one we published". A made-up number falls back to the
   // canonical template, which is the answer that can never be wrong. A concept
   // answer may also use the figures written into its own definition.
-  const allowed = intent === ANALYST_INTENTS.CONCEPT
-    ? glossaryNumbers(glossaryMatches(question))
-    : [];
+  // A statement about a real, named person is the one place where "it sounded
+  // plausible" is worthless. If the answer introduces a name we did not publish
+  // — a university, an employer, a city — the model went past the profile and
+  // the canned bio takes over.
+  if (intent === ANALYST_INTENTS.AUTHOR && introducesUnknownName(answer)) {
+    return replacement();
+  }
+
+  let allowed = [];
+  if (intent === ANALYST_INTENTS.CONCEPT) allowed = glossaryNumbers(glossaryMatches(question));
+  if (intent === ANALYST_INTENTS.AUTHOR) allowed = authorNumbers();
   if (containsUngroundedNumbers(answer, context, allowed)) {
     return replacement();
   }

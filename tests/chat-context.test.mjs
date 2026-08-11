@@ -255,6 +255,49 @@ test("investment advice is refused, and a film recommendation is not investment 
   );
 });
 
+// Asking who built this used to fall through to the general topic domain, which
+// means a language model improvising about a real, named person. It is answered
+// from a profile he wrote, and nothing beyond it may be said.
+test("questions about the author are answered only from his own profile", async () => {
+  const { finalizeAnalystResponse } = await import("../netlify/lib/analyst-fallback.mjs");
+  const context = buildAnalystContext(chatSnapshot());
+
+  for (const asked of [
+    "¿quién es Toño?",
+    "¿quién es Antonio Tapia?",
+    "¿quién es José Antonio?",
+    "¿quién hizo este sitio?",
+    "¿quién está detrás de LikelyCoin?",
+    "¿de quién es este sitio?",
+  ]) {
+    assert.equal(classifyAnalystQuestion(asked), ANALYST_INTENTS.AUTHOR, asked);
+  }
+
+  const canned = templateAnswer("¿quién es Toño?", context);
+  assert.match(canned, /José Antonio Tapia Godínez/);
+  assert.match(canned, /Toño/);
+
+  // A biography the model made up is replaced, whatever it sounds like.
+  for (const invented of [
+    "Toño estudió en Harvard y trabaja en Google desde hace años.",
+    "Es economista egresado de la Universidad Nacional.",
+    "Vive en Madrid y dirige una consultora llamada Quantum.",
+  ]) {
+    assert.equal(
+      finalizeAnalystResponse(invented, { question: "¿quién es Toño?", context }).replaced,
+      true,
+      `must not publish an invented life: ${invented}`,
+    );
+  }
+
+  // And a faithful rephrasing is served as written.
+  const faithful = "LikelyCoin lo construyó José Antonio Tapia Godínez, también conocido como Toño. Publica su código en GitHub y su perfil profesional está en LinkedIn.";
+  assert.equal(
+    finalizeAnalystResponse(faithful, { question: "¿quién es Toño?", context }).replaced,
+    false,
+  );
+});
+
 test("concepts are answered from our own written definitions", () => {
   for (const [question, expected] of [
     ["¿qué es la volatilidad?", ANALYST_INTENTS.CONCEPT],

@@ -12,6 +12,7 @@ import {
   buildAnalystSystemPrompt,
 } from "../lib/analyst-prompt.mjs";
 import { glossaryMatches, serializeGlossary } from "../lib/analyst-glossary.mjs";
+import { serializeAuthorProfile } from "../lib/analyst-author.mjs";
 import {
   CHAT_RATE_LIMIT_STORE,
   estimateChatTokenCost,
@@ -336,6 +337,7 @@ export function createChatHandler(dependencies = {}) {
         glossary: intent === ANALYST_INTENTS.CONCEPT
           ? serializeGlossary(glossaryMatches(input.question))
           : "",
+        author: intent === ANALYST_INTENTS.AUTHOR ? serializeAuthorProfile() : "",
       });
     } catch {
       // Over its byte envelope: answer deterministically rather than send a
