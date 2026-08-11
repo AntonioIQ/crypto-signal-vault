@@ -194,7 +194,25 @@ function errorCopy(error) {
 }
 
 export function initTranscript(documentRef, container) {
-  const paint = (turn) => {
+  // The thread scrolls inside its own box so the input never moves. Without
+  // this, every new turn was painted below the fold and the reader had to drag
+  // the scrollbar to read the answer they had just asked for.
+  // Plain assignment, and then again after the next layout. The box is revealed
+  // in the same tick as the first turn is painted, and a scroll set before that
+  // layout settles can be undone by it. Asserting the position twice is cheap
+  // and removes the timing question entirely.
+  //
+  // Deliberately not animated: the position landing is the requirement, gliding
+  // is not, and an animation is one more thing that can silently not happen.
+  const scrollToLatest = () => {
+    if (typeof container.scrollHeight !== 'number') return;
+    container.scrollTop = container.scrollHeight;
+    globalThis.requestAnimationFrame?.(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+  };
+
+  const paint = (turn, { scroll = true } = {}) => {
     const item = documentRef.createElement('article');
     const outsideOurData = turn.role === 'analyst'
       && turn.text.startsWith(GENERAL_ANSWER_PREFIX);
@@ -216,15 +234,20 @@ export function initTranscript(documentRef, container) {
     item.appendChild(who);
     item.appendChild(body);
     container.appendChild(item);
+    if (scroll) scrollToLatest();
     return item;
   };
 
   return {
     paint,
+    scrollToLatest,
     render(turns) {
       container.replaceChildren();
-      turns.forEach(paint);
+      // Restoring a thread is not a new message: paint it whole, then land at
+      // the bottom in one jump instead of animating through every turn.
+      turns.forEach((turn) => paint(turn, { scroll: false }));
       container.hidden = turns.length === 0;
+      if (turns.length > 0) scrollToLatest();
     },
   };
 }

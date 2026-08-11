@@ -20,3 +20,8 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+# Local dev-server config for the preview pane: machine-specific (python path,
+# port), regenerated in seconds, and not excluded from the Netlify build — so
+# committing it would cost a 15-credit production deploy. See docs/06_PRESUPUESTO.md §6.
+.claude/launch.json

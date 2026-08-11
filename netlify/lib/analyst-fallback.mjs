@@ -203,45 +203,61 @@ function timestampNumbers(value) {
   return numbers;
 }
 
+// Published figures come in two kinds, and conflating them was a hole in the
+// one guarantee this product cannot lose.
+//
+// A price or a percentage may legitimately be rounded ("63,935.12" → "63,935"),
+// so those tolerate a little slack. A count, an hour and a year may not: they
+// are already exact, and the proportional slack turned the year 2026 into a
+// licence to state anything from 2016 to 2036 — an invented date passing the
+// check that exists to stop invented figures.
 function groundedValues(context) {
-  const values = [...PRODUCT_NUMBERS];
-  const push = (value) => {
+  const exact = [...PRODUCT_NUMBERS];
+  const approximate = [];
+  const pushExact = (value) => {
     if (typeof value === "number" && Number.isFinite(value)) {
-      values.push(value, Math.abs(value));
+      exact.push(value, Math.abs(value));
+    }
+  };
+  const pushApproximate = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      approximate.push(value, Math.abs(value));
     }
   };
 
-  values.push(...timestampNumbers(context?.generated_at));
+  exact.push(...timestampNumbers(context?.generated_at));
 
   for (const item of Object.values(context?.assets ?? {})) {
-    push(item.price_usd);
-    values.push(...timestampNumbers(item.source_updated_at));
-    values.push(...timestampNumbers(item.accuracy?.measured_through));
+    pushApproximate(item.price_usd);
+    exact.push(...timestampNumbers(item.source_updated_at));
+    exact.push(...timestampNumbers(item.accuracy?.measured_through));
     const forecast = item.forecast ?? {};
-    push(forecast.horizon_hours);
-    push(forecast.terminal_change_percent);
-    push(forecast.confidence?.percent);
-    push(forecast.confidence?.sample_size);
+    pushExact(forecast.horizon_hours);
+    pushApproximate(forecast.terminal_change_percent);
+    pushApproximate(forecast.confidence?.percent);
+    pushExact(forecast.confidence?.sample_size);
     // The scenario board states "N de M escenarios", so that N is a figure the
     // product itself publishes even though it is derived from the other two.
     if (
       typeof forecast.confidence?.percent === "number" &&
       typeof forecast.confidence?.sample_size === "number"
     ) {
-      push(Math.round((forecast.confidence.percent / 100) * forecast.confidence.sample_size));
+      pushExact(Math.round((forecast.confidence.percent / 100) * forecast.confidence.sample_size));
     }
     const accuracy = item.accuracy ?? {};
-    push(accuracy.window_days);
-    push(accuracy.hit_rate_percent);
-    push(accuracy.sample_size);
+    pushExact(accuracy.window_days);
+    pushApproximate(accuracy.hit_rate_percent);
+    pushExact(accuracy.sample_size);
   }
-  return values;
+  return { exact, approximate };
 }
 
 // A stated figure counts as grounded when it is a published value, or that
-// value rounded the way a person would write it.
-function isGrounded(stated, values) {
-  return values.some((value) => {
+// value rounded the way a person would write it. Rounding is only forgiven for
+// the kinds of figure a person actually rounds.
+function isGrounded(stated, { exact, approximate }) {
+  if (exact.some((value) => Number.isFinite(value) && stated === value)) return true;
+  return approximate.some((value) => {
     if (!Number.isFinite(value)) return false;
     if (stated === value) return true;
     if (stated === Math.round(value)) return true;
@@ -252,7 +268,10 @@ function isGrounded(stated, values) {
 }
 
 export function containsUngroundedNumbers(answer, context, extraValues = []) {
-  const values = [...groundedValues(context), ...extraValues];
+  const published = groundedValues(context);
+  // Glossary figures are written by us and already exact ("21 millones"), so
+  // they ground themselves and nothing near them.
+  const values = { exact: [...published.exact, ...extraValues], approximate: published.approximate };
   // Spanish thousands separators are dots and decimals are commas as often as
   // the reverse, so both are normalized before parsing.
   const matches = String(answer).match(/\d[\d.,]*/g) ?? [];

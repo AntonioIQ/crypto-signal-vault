@@ -330,3 +330,32 @@ test("dates we publish are grounded, invented ones are not", () => {
     );
   }
 });
+
+// The tolerance that forgives a rounded price used to apply to every published
+// figure, so the year 2026 grounded anything from 2016 to 2036: an invented date
+// walked straight through the check that exists to stop invented figures. A
+// price may be rounded; a year, an hour and a count may not.
+test("rounding is forgiven for prices, never for years, hours or counts", () => {
+  const context = buildAnalystContext(chatSnapshot());
+
+  // 65,000 is published, so writing it shorter is still the same figure.
+  assert.equal(containsUngroundedNumbers("Bitcoin ronda los 65000 USD.", context), false);
+
+  for (const nearMiss of [
+    "Los datos son del 21 de julio de 2025.",
+    "Los datos son del 21 de julio de 2030.",
+    "La lectura se ancló a las 13:00.",
+    "Se midieron 95 predicciones.",
+    "Se midieron 97 predicciones.",
+  ]) {
+    assert.equal(
+      containsUngroundedNumbers(nearMiss, context),
+      true,
+      `a figure near a published one is not a published figure: ${nearMiss}`,
+    );
+  }
+
+  // And the real ones still pass.
+  assert.equal(containsUngroundedNumbers("Se midieron 96 predicciones.", context), false);
+  assert.equal(containsUngroundedNumbers("Los datos son del 21 de julio de 2026.", context), false);
+});

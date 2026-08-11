@@ -8,10 +8,16 @@ import { ASSETS } from "../netlify/lib/coingecko.mjs";
 
 export const ASSET_KEYS = Object.keys(ASSETS);
 
+// The filler timestamp used to be `new Date()`, which made every assertion
+// about published figures depend on the wall clock: the digits of "now" ground
+// themselves, so a test could pass at 22:00 and fail at 03:52 because the hour
+// happened to contain the digit under test. Fixtures state a fixed instant.
+export const FIXTURE_UPDATED_AT = "2026-07-21T17:59:00.000Z";
+
 // A full { asset: { price, sourceUpdatedAt } } map for createFreshSnapshot.
 export function fillPrices(overrides = {}, defaults = {}) {
   const price = defaults.price ?? 100;
-  const sourceUpdatedAt = defaults.sourceUpdatedAt ?? new Date().toISOString();
+  const sourceUpdatedAt = defaults.sourceUpdatedAt ?? FIXTURE_UPDATED_AT;
   const out = {};
   for (const asset of ASSET_KEYS) {
     out[asset] = overrides[asset] ?? { price, sourceUpdatedAt };

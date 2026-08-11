@@ -11,9 +11,13 @@
   #   ml/              the training code, run on GitHub Actions
   #   tests/           the suites, run in CI
   #   scripts/publish-*  release tooling invoked by the workflows
+  #   .claude/, .gitignore  agent and tooling config, read by nothing we deploy
   # A fix to ml/ or tests/ used to cost a full production deploy for a change
   # that could not alter a single byte of the site.
-  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs/' ':(exclude)*.md' ':(exclude).github/' ':(exclude)ml/' ':(exclude)tests/' ':(exclude)scripts/publish-*'"
+  # The list used to name only work folders and *.md, so loose non-markdown
+  # files fell through it: adding an eight-line .claude/launch.json, or a line to
+  # .gitignore, cost the same 15 credits as shipping a whole phase.
+  ignore = "git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- . ':(exclude)docs/' ':(exclude)*.md' ':(exclude).github/' ':(exclude)ml/' ':(exclude)tests/' ':(exclude)scripts/publish-*' ':(exclude).claude/' ':(exclude).gitignore'"
 
 [functions]
   directory = "netlify/functions"
