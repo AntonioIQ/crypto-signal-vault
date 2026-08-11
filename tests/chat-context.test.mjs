@@ -298,6 +298,51 @@ test("questions about the author are answered only from his own profile", async 
   );
 });
 
+// A follow-up rarely repeats a name. Without the thread, "¿y qué le gusta?"
+// left the author domain: the analyst answered about itself ("no tengo estado
+// civil, soy un modelo de lenguaje") or denied knowing a taste we do publish.
+test("the conversation stays on the author once it is about him", async () => {
+  const { threadIsAboutAuthor } = await import("../netlify/lib/analyst-fallback.mjs");
+  const history = [
+    { role: "user", text: "¿quién es Toño?" },
+    { role: "analyst", text: "Toño es José Antonio Tapia Godínez, quien construyó LikelyCoin." },
+  ];
+  assert.equal(threadIsAboutAuthor(history), true);
+  assert.equal(threadIsAboutAuthor([{ role: "user", text: "¿cómo va bitcoin?" }]), false);
+
+  const authorThread = true;
+  for (const followUp of [
+    "¿qué deporte le gusta?",
+    "¿está casado?",
+    "¿dónde estudió?",
+    "¿dónde trabajó antes?",
+    "¿y qué más?",
+  ]) {
+    assert.equal(
+      classifyAnalystQuestion(followUp, "btc", { authorThread }),
+      ANALYST_INTENTS.AUTHOR,
+      followUp,
+    );
+  }
+
+  // Our own data still wins: being mid-biography does not make a price question
+  // about the person.
+  assert.equal(
+    classifyAnalystQuestion("¿cuánto vale bitcoin?", "btc", { authorThread }),
+    ANALYST_INTENTS.PRICE,
+  );
+  assert.equal(
+    classifyAnalystQuestion("¿qué tan seguido acierta?", "btc", { authorThread }),
+    ANALYST_INTENTS.ACCURACY,
+  );
+
+  // And with no such thread, a bare follow-up belongs to the coin on screen.
+  assert.equal(
+    classifyAnalystQuestion("¿y qué más?", "btc", { authorThread: false }),
+    ANALYST_INTENTS.EXPLANATION,
+  );
+});
+
 test("concepts are answered from our own written definitions", () => {
   for (const [question, expected] of [
     ["¿qué es la volatilidad?", ANALYST_INTENTS.CONCEPT],

@@ -5,6 +5,7 @@ import {
   ANALYST_INTENTS,
   classifyAnalystQuestion,
   finalizeAnalystResponse,
+  threadIsAboutAuthor,
   templateAnswer,
 } from "../lib/analyst-fallback.mjs";
 import {
@@ -314,7 +315,9 @@ export function createChatHandler(dependencies = {}) {
     }
 
     const context = await safeContext(readSnapshotFn);
-    const intent = classifyAnalystQuestion(input.question, input.asset);
+    const intent = classifyAnalystQuestion(input.question, input.asset, {
+      authorThread: threadIsAboutAuthor(input.history),
+    });
 
     // Investment advice and attempts to steer the analyst off its instructions
     // are answered by fixed templates and never reach the provider: neither may
@@ -361,6 +364,7 @@ export function createChatHandler(dependencies = {}) {
         question: input.question,
         context,
         asset: input.asset,
+        intent,
       });
       return jsonResponse(
         { answer: result.answer, degraded: result.replaced },

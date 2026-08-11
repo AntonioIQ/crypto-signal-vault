@@ -121,7 +121,22 @@ function isBareFollowUp(text) {
   return words <= 4 || (words <= 10 && FOLLOW_UP_PATTERN.test(text));
 }
 
-export function classifyAnalystQuestion(question, focus = undefined) {
+// True when the conversation has been about the person who built the site. A
+// follow-up rarely repeats a name: you ask "¿quién es Toño?" and then "¿y qué le
+// gusta?". Without this, the second question left the author domain and the
+// analyst answered about itself — "no tengo estado civil, soy un modelo de
+// lenguaje" — or claimed to know nothing about a taste we do publish.
+export function threadIsAboutAuthor(history = []) {
+  return history.some((turn) => typeof turn?.text === "string" && isAuthorQuestion(turn.text));
+}
+
+// Deliberately narrow. "le" and "él" point at a person; "lo", "el" and "su"
+// point at anything, and the data intents are decided before this anyway.
+const REFERS_TO_PERSON = /\b(le|el|ella)\b/;
+// What people actually ask about a person once they know who he is.
+const BIOGRAPHICAL = /\b(estudi\w*|trabaj\w*|vive|vivio|nacio|casad\w*|hijos|edad|carrera|profesion|experiencia|gusta\w*|aficion\w*|deporte\w*|hobby|quien es)\b/;
+
+export function classifyAnalystQuestion(question, focus = undefined, options = {}) {
   const text = normalized(question);
   // These two are answered by fixed templates and never reach the provider, so
   // they are decided before anything else can claim the question.
@@ -138,6 +153,16 @@ export function classifyAnalystQuestion(question, focus = undefined) {
   // Who built this. Answered only from the profile he wrote, never from what a
   // model happens to associate with a real person's name.
   if (isAuthorQuestion(question)) return ANALYST_INTENTS.AUTHOR;
+
+  // Still about him: the thread has been, and this question either refers back
+  // or names nothing at all.
+  if (
+    options.authorThread &&
+    !MENTIONS_ASSET.test(text) &&
+    (isBareFollowUp(text) || REFERS_TO_PERSON.test(text) || BIOGRAPHICAL.test(text))
+  ) {
+    return ANALYST_INTENTS.AUTHOR;
+  }
 
   // A term we have a written definition for is answered from that definition.
   if (glossaryMatches(question).length > 0) return ANALYST_INTENTS.CONCEPT;
@@ -458,8 +483,11 @@ export function templateAnswer(
   return limitWords(answer);
 }
 
-export function finalizeAnalystResponse(answer, { question, context, asset }) {
-  const intent = classifyAnalystQuestion(question, asset);
+export function finalizeAnalystResponse(answer, { question, context, asset, intent: given }) {
+  // The caller already classified the question, with the conversation in hand.
+  // Re-deriving it here without that history sent a follow-up about the author
+  // down the general-topic path, where the guards are the wrong ones.
+  const intent = given ?? classifyAnalystQuestion(question, asset);
   const replacement = () => ({
     answer: templateAnswer(question, context, intent, asset),
     replaced: true,
