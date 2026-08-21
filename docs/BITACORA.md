@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-21 — Revisión documental del último commit
+
+La revisión de `382294c` encontró dos inconsistencias y ambas quedaron
+corregidas sin tocar código:
+
+- La procedencia de la ficha del autor ahora distingue entre **verificar**
+  afirmaciones concretas mediante consultas web e **incorporar** información de
+  una búsqueda genérica por nombre. Esto último no se hizo porque los resultados
+  corresponden a homónimos.
+- El hoyo de exclusiones de Netlify dejó de aparecer como deuda técnica: ya
+  estaba resuelto en `netlify.toml` y documentado como cerrado en
+  `06_PRESUPUESTO.md` §6.
+
+El cambio es exclusivamente documental y entra en la exclusión de `docs/` del
+comando `ignore` de Netlify; no requiere build ni deploy de producción.
+
+---
+
 ## 2026-08-11 (madrugada) — El hilo ya se mueve, y el Analista sabe quién lo hizo ✅
 
 PR [#6](https://github.com/AntonioIQ/crypto-signal-vault/pull/6) mergeada
@@ -15,19 +33,21 @@ anterior: el contenedor tiene scroll propio para que el cuadro de escribir no se
 mueva, pero nunca escribí nada que lo moviera.
 
 **Lo segundo que pidió**: que el chat pueda decir quién es él. Se resolvió con una
-ficha en el repo, no con una búsqueda: preguntas por Toño / José Antonio / Antonio
-Tapia / «¿quién hizo esto?» van a un dominio propio contestado solo desde
-`analyst-author.mjs`, con dos guards encima (cifras aterrizadas contra la ficha,
-y sustitución si la respuesta mete un nombre propio que la ficha no tiene).
+ficha en el repo, no consultando la web en runtime ni improvisando a partir de una
+búsqueda genérica por nombre: preguntas por Toño / José Antonio / Antonio Tapia /
+«¿quién hizo esto?» van a un dominio propio contestado solo desde
+`analyst-author.mjs`, con dos guards encima (cifras aterrizadas contra la ficha y
+sustitución si la respuesta mete un nombre propio que la ficha no tiene).
 
 **Sobre de dónde salió el contenido de la ficha**, porque importa: Antonio pegó
-una semblanza larga escrita por ChatGPT y dijo «investiga de mí en la red». Lo
-que hice fue buscar de verdad y reportar honestamente: su GitHub sí sirve y es
-verificablemente suyo (el correo coincide con el del footer); LinkedIn responde
-`HTTP 999`; y **buscar su nombre devuelve otras personas por completo** —un
-académico de la UNAM homónimo, un filósofo español, políticos dominicanos—. De la
-semblanza verifiqué lo falsificable antes de publicarlo: la tesis existe en el
-repositorio de la UNAM y el libro con ese ISBN está catalogado a su nombre.
+una semblanza larga escrita por ChatGPT y dijo «investiga de mí en la red». Se
+hicieron consultas puntuales para verificar afirmaciones concretas: su GitHub sí
+sirve y es verificablemente suyo (el correo coincide con el del footer), LinkedIn
+responde `HTTP 999`, la tesis existe en el repositorio de la UNAM y el libro con
+ese ISBN está catalogado a su nombre. En cambio, **la búsqueda genérica por su
+nombre devuelve otras personas por completo** —un académico de la UNAM homónimo,
+un filósofo español, políticos dominicanos—, por lo que ninguno de esos
+resultados se incorporó a la ficha.
 ChatGPT no había inventado eso. Lo que **no** entró: vida personal, fe, la
 sección de debilidades y la lista de empleadores previos — decisión suya.
 

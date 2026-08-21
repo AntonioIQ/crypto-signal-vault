@@ -2,7 +2,7 @@
 
 > **Este archivo es la fuente de verdad del avance.** Cualquier sesión nueva (Claude Code, claude.ai, otra máquina) debe leerlo primero. Se sobrescribe al final de cada sesión de trabajo; el historial narrativo vive en [BITACORA.md](BITACORA.md).
 
-**Última actualización**: 2026-08-11 02:10 (hora CDMX)
+**Última actualización**: 2026-08-21 11:45 (hora CDMX)
 
 > ⚠️ **Antes de tocar nada, lee [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md).** Netlify Free = 300 créditos/mes, cada production deploy cuesta 15, y si se agotan **el sitio se pausa**. Nada mutable se commitea; batchea los pushes.
 
@@ -34,11 +34,11 @@ Cuatro cosas en un solo deploy de 15 créditos:
 
 **Sobre la ficha del autor**: el contenido salió de lo que Antonio publica él
 mismo (footer y su GitHub, cuyo correo coincide y confirma que es él y no un
-homónimo) más lo que él confirmó. La tesis y el libro se verificaron contra el
-repositorio de la UNAM y un catálogo de librería antes de publicarlos. **No** se
-armó con una búsqueda web: buscar su nombre devuelve otras personas por completo.
-Quedaron fuera a decisión suya la vida personal, la fe y los empleadores previos
-uno por uno.
+homónimo) más lo que él confirmó. Las consultas web se usaron únicamente para
+verificar afirmaciones concretas de la semblanza —la tesis y el libro—, no para
+incorporar datos encontrados mediante una búsqueda genérica por nombre: esos
+resultados corresponden a otras personas. Quedaron fuera a decisión suya la vida
+personal, la fe y los empleadores previos uno por uno.
 
 ## Primera entrega (2026-08-10) — el Analista conversacional
 
@@ -344,10 +344,9 @@ rates reales publicados. No requiere acción.
 
 **Deuda técnica pendiente**: (a) resiliencia por-moneda en el entrenamiento
 —hoy es «todo o nada»: si el histórico de una moneda falla, cae el pronóstico de
-las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions; (c) **hoyo en la lista
-de exclusiones de `netlify.toml`** — `.claude/launch.json` y `.gitignore`
-construyen producción aunque no puedan cambiar el sitio; se arregla batcheado con
-el próximo cambio de código, ver [`06_PRESUPUESTO.md`](06_PRESUPUESTO.md) §6.
+las 11—; (b) actions v4 fuerzan Node 24 en GitHub Actions. El hoyo de exclusiones
+de `netlify.toml` ya no pertenece a esta lista: quedó resuelto y documentado en
+[`06_PRESUPUESTO.md`](06_PRESUPUESTO.md) §6.
 
 **Revisar el balance real de créditos en el panel de Netlify**: las cifras de
 `06_PRESUPUESTO.md` §1 son del ciclo de julio y nadie las ha actualizado desde
